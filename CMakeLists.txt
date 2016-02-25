@@ -6,6 +6,14 @@ if("${CMAKE_BINARY_DIR}" STREQUAL "${CMAKE_SOURCE_DIR}")
    message(FATAL_ERROR "In-source builds are not allowed. Create a directory, and build within it.")
 endif()
 
+#Add simple-* stuff
+set(SIMPLE_BASE "./3rdParty/simples")
+include_directories(${SIMPLE_BASE})
+include_directories(${SIMPLE_BASE}/patterns)
+set(SIMPLE_SOURCES
+    ${SIMPLE_BASE}/logger.cpp
+)
+    
 #Add GLM-0.9.7.1
 include_directories("./3rdParty/glm-0.9.7.1")
 
@@ -15,17 +23,24 @@ add_subdirectory(${GLFW3_BASE})
 include_directories(${GLFW3_BASE}/include)
 
 #Add glLoadGen
+include_directories("./3rdParty/glLoadGen")
 set(GLLOADGEN_SOURCES 
     "./3rdParty/glLoadGen/gl_core_3_3_noext_pcpp.cpp")
-include_directories("./3rdParty/glLoadGen")
 
 #Project files
 include_directories("./src")
-set(SOURCES 
+set(RANDPART_SOURCES 
 	"src/main.cpp"
 )
 
-add_executable(${TARGET_NAME} ${GLLOADGEN_SOURCES} ${SOURCES})
+#Add up all sources
+set(SOURCES
+    ${SIMPLE_SOURCES}
+    ${GLLOADGEN_SOURCES}
+    ${RANDPART_SOURCES}
+)
+
+add_executable(${TARGET_NAME} ${SOURCES})
 target_link_libraries(${TARGET_NAME} glfw ${GLFW_LIBRARIES})
 
 # c++11

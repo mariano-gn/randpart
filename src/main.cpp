@@ -19,10 +19,52 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-
-#include <iostream>
-#include <string>
+#include <gl_core_3_3_noext_pcpp.hpp>
+#include <GLFW/glfw3.h>
 
 int main() {
-    std::cout << "Hello World!" << std::endl;
+    GLFWwindow* window;
+
+    /* Initialize the library */
+    if (!glfwInit())
+        return -1;
+
+    /* Core, Forward Compatible, 3.3 OpenGL cotext. */
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, gl::TRUE_);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+
+    /* Create a windowed mode window and its OpenGL context */
+    window = glfwCreateWindow(1024, 768, "Hello World", nullptr, nullptr);
+    if (!window) {
+        glfwTerminate();
+        return -1;
+    }
+
+    /* Make the window's context current */
+    glfwMakeContextCurrent(window);
+
+    if (!gl::sys::LoadFunctions()) {
+        glfwTerminate();
+        return -1;
+    }
+
+    /*v-sync*/
+    glfwSwapInterval(1);
+
+    /* Loop until the user closes the window */
+    while (!glfwWindowShouldClose(window)) {
+        /* Render here */
+
+        /* Swap front and back buffers */
+        glfwSwapBuffers(window);
+
+        /* Poll for and process events */
+        glfwPollEvents();
+    }
+
+    glfwTerminate();
+    return 0;
 }
+

@@ -19,15 +19,29 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
 #include <gl_core_3_3_noext_pcpp.hpp>
 #include <GLFW/glfw3.h>
+#include <logger.h>
 
-int main() {
-    GLFWwindow* window;
+#ifdef _LOG
+void error_cb(int code, const char* str) {
+    LOGD("GLFW", "Error code ", code, ", text: ", str);
+}
+#endif
 
+bool init(GLFWwindow*& window, int w, int h, const char* title) {
+    debug::Logger_Config lg{};
+    lg.logger_types = debug::fType::CONSOLE;
+    debug::Logger::init(lg);
+
+#ifdef _LOG
+    glfwSetErrorCallback(error_cb);
+#endif
     /* Initialize the library */
-    if (!glfwInit())
-        return -1;
+    if (!glfwInit()) {
+        return false;
+    }
 
     /* Core, Forward Compatible, 3.3 OpenGL cotext. */
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -36,35 +50,44 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
     /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(1024, 768, "Hello World", nullptr, nullptr);
+    window = glfwCreateWindow(w, h, title, nullptr, nullptr);
     if (!window) {
-        glfwTerminate();
-        return -1;
+        return false;
     }
 
     /* Make the window's context current */
     glfwMakeContextCurrent(window);
 
+    /* Load OpenGL Functions */
     if (!gl::sys::LoadFunctions()) {
-        glfwTerminate();
-        return -1;
+        return false;
     }
 
     /*v-sync*/
     glfwSwapInterval(1);
+}
 
-    /* Loop until the user closes the window */
-    while (!glfwWindowShouldClose(window)) {
-        /* Render here */
+int shutdown() {
+    glfwTerminate();
+    debug::Logger::destroy();
+    return 0;
+}
 
-        /* Swap front and back buffers */
-        glfwSwapBuffers(window);
+int main() {
+    GLFWwindow* window;
+    if (init(window, 1024, 768, "Random numbers and particles!")) {
+        /* Loop until the user closes the window */
+        while (!glfwWindowShouldClose(window)) {
+            /* Render here */
 
-        /* Poll for and process events */
-        glfwPollEvents();
+            /* Swap front and back buffers */
+            glfwSwapBuffers(window);
+
+            /* Poll for and process events */
+            glfwPollEvents();
+        }
     }
 
-    glfwTerminate();
-    return 0;
+    return shutdown();
 }
 

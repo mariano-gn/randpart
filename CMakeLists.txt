@@ -31,6 +31,7 @@ set(GLLOADGEN_SOURCES
 include_directories("./src")
 set(RANDPART_SOURCES 
 	"src/main.cpp"
+	"src/window.cpp"
 )
 
 #Add up all sources
@@ -39,6 +40,9 @@ set(SOURCES
     ${GLLOADGEN_SOURCES}
     ${RANDPART_SOURCES}
 )
+
+#Definitions
+add_definitions(-D_LOG)
 
 add_executable(${TARGET_NAME} ${SOURCES})
 target_link_libraries(${TARGET_NAME} glfw ${GLFW_LIBRARIES})

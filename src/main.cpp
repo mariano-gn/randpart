@@ -65,6 +65,7 @@ bool init(GLFWwindow*& window, int w, int h, const char* title) {
 
     /*v-sync*/
     glfwSwapInterval(1);
+	return true;
 }
 
 int shutdown() {

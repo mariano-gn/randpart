@@ -39,6 +39,7 @@ std::shared_ptr<window> init(int w, int h, const char* title) {
 #ifdef _LOG
     glfwSetErrorCallback(error_cb);
 #endif
+
     return std::make_shared<window>(glm::ivec2{ w, h }, std::string{ title });
 }
 

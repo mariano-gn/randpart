@@ -14,7 +14,7 @@ include_directories(${SIMPLE_BASE}/patterns)
 set(SIMPLE_SOURCES
     ${SIMPLE_BASE}/logger.cpp
 )
-    
+
 #Add GLM-0.9.7.1
 include_directories("./3rdParty/glm-0.9.7.1")
 
@@ -25,12 +25,12 @@ include_directories(${GLFW3_BASE}/include)
 
 #Add glLoadGen
 include_directories("./3rdParty/glLoadGen")
-set(GLLOADGEN_SOURCES 
+set(GLLOADGEN_SOURCES
     "./3rdParty/glLoadGen/gl_core_3_3_noext_pcpp.cpp")
 
 #Project files
 include_directories("./src")
-set(RANDPART_SOURCES 
+set(RANDPART_SOURCES
 	"src/main.cpp"
 	"src/particles.cpp"
 	"src/window.cpp"
@@ -45,6 +45,8 @@ set(SOURCES
 
 #Definitions
 add_definitions(-D_LOG)
+# Force C++11 on GLM
+add_definitions(-DGLM_FORCE_CXX11)
 
 #GLM
 add_definitions(-DGLM_FORCE_CXX11)
@@ -67,7 +69,7 @@ else()
     endif()
 endif()
 
-# Warnings, errors & definitions
+# Set up warnings/errors and other needed flags.
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" OR ${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic -Werror")
 
@@ -83,4 +85,6 @@ else() # Assumes windows
     endif()
     # Also Warnings as errors.
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
+    # Specify unwind sematics (fix C4577 and related)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
 endif()

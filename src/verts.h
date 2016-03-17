@@ -25,12 +25,15 @@ SOFTWARE.
 
 namespace shaders {
     namespace vertex {
-        constexpr const char* basic = 
-            "#version 330                                   \n"
-            "uniform mat4 MVP;                              \n"
+        constexpr const char* basic =
+            "#version 330 core                              \n"
+            "uniform mat4 VP;                               \n"
             "in vec3 Position;                              \n"
+            "in vec3 inColor;                               \n"
+            "out vec4 Color;                                \n"
             "void main() {                                  \n"
-            "    gl_Position = MVP * vec4(Position, 1.0);   \n"
+            "    Color = vec4(inColor, 1.0);                \n"
+            "    gl_Position = VP * vec4(Position, 1.0);    \n"
             "}                                              \n";
     }
 }

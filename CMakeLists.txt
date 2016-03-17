@@ -7,6 +7,7 @@ if("${CMAKE_BINARY_DIR}" STREQUAL "${CMAKE_SOURCE_DIR}")
 endif()
 
 #Add simple-* stuff
+include_directories("./3rdParty/timer")
 set(SIMPLE_BASE "./3rdParty/simples")
 include_directories(${SIMPLE_BASE})
 include_directories(${SIMPLE_BASE}/patterns)
@@ -31,6 +32,7 @@ set(GLLOADGEN_SOURCES
 include_directories("./src")
 set(RANDPART_SOURCES 
 	"src/main.cpp"
+	"src/particles.cpp"
 	"src/window.cpp"
 )
 
@@ -43,6 +45,10 @@ set(SOURCES
 
 #Definitions
 add_definitions(-D_LOG)
+
+#GLM
+add_definitions(-DGLM_FORCE_CXX11)
+add_definitions(-DGLM_FORCE_RADIANS)
 
 add_executable(${TARGET_NAME} ${SOURCES})
 target_link_libraries(${TARGET_NAME} glfw ${GLFW_LIBRARIES})
@@ -59,4 +65,22 @@ else()
     if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin") # If on Apple, use libc++
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
     endif()
+endif()
+
+# Warnings, errors & definitions
+if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" OR ${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic -Werror")
+
+    # Per configuration flags.
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+else() # Assumes windows
+    message(STATUS "Assuming MSVC compiler")
+    if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
+        string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
+    endif()
+    # Also Warnings as errors.
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
 endif()

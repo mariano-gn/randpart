@@ -22,10 +22,14 @@ SOFTWARE.
 
 #ifndef _WINDOW_H_
 #define _WINDOW_H_
+#include <gl_core_3_3_noext_pcpp.hpp>
 #include <glm/vec2.hpp>
+#include <glm/matrix.hpp>
+#include <memory>
 #include <string>
 
-struct GLFWWindow;
+class particles;
+struct GLFWwindow;
 
 class window {
 public:
@@ -36,7 +40,12 @@ public:
 
 private:
     glm::ivec2 m_size;
-    GLFWWindow* mp_impl;
+    glm::mat4 m_vp;
+    GLFWwindow* mp_impl;
+    GLuint m_vao = 0, m_program = 0, m_vploc = 0;
+    std::shared_ptr<particles> m_particles;
+
+    void setup_gl();
 };
 
 #endif // _WINDOW_H_

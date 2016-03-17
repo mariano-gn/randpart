@@ -20,20 +20,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#ifndef _FRAGS_H_
-#define _FRAGS_H_
+#ifndef _PARTICLES_H_
+#define _PARTICLES_H_
+#include <gl_core_3_3_noext_pcpp.hpp>
+#include <glm/vec3.hpp>
+#include <cstdint>
+#include <vector>
 
-namespace shaders {
-    namespace fragment {
-        constexpr const char* basic =
-            "#version 330 core                              \n"
-            "in vec4 Color;                                 \n"
-            "out vec4 outColor;                             \n"
-            "void main() {                                  \n"
-            "    outColor = Color;                          \n"
-            "}                                              \n"
-            "                                               \n";
-    }
-}
+struct particle_data {
+    glm::vec3 pos;
+    glm::vec3 color;
+};
 
-#endif // _FRAGS_H_
+class particles {
+public:
+    particles(GLuint programID, uint32_t number = 4);
+    ~particles();
+
+    void render();
+    void update(float dt);
+
+private:
+    GLuint m_vbo, m_ebo;
+    std::vector<particle_data> m_particles;
+};
+
+#endif // _PARTICLES_H_

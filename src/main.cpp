@@ -20,9 +20,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include <gl_core_3_3_noext_pcpp.hpp>
+#include "window.h"
 #include <GLFW/glfw3.h>
 #include <logger.h>
+#include <memory>
 
 #ifdef _LOG
 void error_cb(int code, const char* str) {
@@ -30,7 +31,7 @@ void error_cb(int code, const char* str) {
 }
 #endif
 
-bool init(GLFWwindow*& window, int w, int h, const char* title) {
+std::shared_ptr<window> init(int w, int h, const char* title) {
     debug::Logger_Config lg{};
     lg.logger_types = debug::fType::CONSOLE;
     debug::Logger::init(lg);
@@ -38,56 +39,18 @@ bool init(GLFWwindow*& window, int w, int h, const char* title) {
 #ifdef _LOG
     glfwSetErrorCallback(error_cb);
 #endif
-    /* Initialize the library */
-    if (!glfwInit()) {
-        return false;
-    }
-
-    /* Core, Forward Compatible, 3.3 OpenGL cotext. */
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, gl::TRUE_);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-
-    /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(w, h, title, nullptr, nullptr);
-    if (!window) {
-        return false;
-    }
-
-    /* Make the window's context current */
-    glfwMakeContextCurrent(window);
-
-    /* Load OpenGL Functions */
-    if (!gl::sys::LoadFunctions()) {
-        return false;
-    }
-
-    /*v-sync*/
-    glfwSwapInterval(1);
+    return std::make_shared<window>(glm::ivec2{ w, h }, std::string{ title });
 }
 
-int shutdown() {
-    glfwTerminate();
+void shutdown(std::shared_ptr<window> wnd) {
+    wnd.reset();
     debug::Logger::destroy();
-    return 0;
 }
 
 int main() {
-    GLFWwindow* window;
-    if (init(window, 1024, 768, "Random numbers and particles!")) {
-        /* Loop until the user closes the window */
-        while (!glfwWindowShouldClose(window)) {
-            /* Render here */
-
-            /* Swap front and back buffers */
-            glfwSwapBuffers(window);
-
-            /* Poll for and process events */
-            glfwPollEvents();
-        }
-    }
-
-    return shutdown();
+    auto w = init(1024, 768, "Random numbers and particles!");
+    const auto exit_value = w->run() ? 0 : -1;
+    shutdown(w);
+    return exit_value;
 }
 

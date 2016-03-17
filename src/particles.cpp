@@ -26,7 +26,7 @@ SOFTWARE.
 #include <glm/gtc/type_ptr.hpp>
 #include <array>
 
-static const char* const kTag = "particles";
+//static const char* const kTag = "particles";
 
 particles::particles(const GLuint programID, const uint32_t /*number*/) 
     : m_particles(4/*number*/) {

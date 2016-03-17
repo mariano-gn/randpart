@@ -4,3 +4,6 @@
 [submodule "3rdParty/simples"]
 	path = 3rdParty/simples
 	url = https://github.com/mariano-gn/simple-logger
+[submodule "3rdParty/timer"]
+	path = 3rdParty/timer
+	url = https://github.com/mariano-gn/simple-timer

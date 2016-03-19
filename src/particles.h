@@ -45,8 +45,11 @@ public:
     void update(float dt);
 
 private:
-    GLuint m_vbo, m_ebo;
+    GLuint m_vao, m_vbo, m_ebo;
     std::vector<particle_data> m_particles;
+
+    void init_particles();
+    void setup_gl(std::shared_ptr<glprogram> active_program);
 };
 
 #endif // _PARTICLES_H_

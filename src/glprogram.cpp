@@ -72,7 +72,7 @@ void glprogram::activate() {
     CHECK_GL_ERRORS();
 }
 
-GLuint glprogram::get_uniform_location(const std::string& name) {
+GLint glprogram::get_uniform_location(const std::string& name) {
     auto it = m_uniform_loc.find(name);
     if (it != m_uniform_loc.end()) {
         return it->second;
@@ -85,7 +85,7 @@ GLuint glprogram::get_uniform_location(const std::string& name) {
     }
 }
 
-GLuint glprogram::get_attrib_location(const std::string& name) {
+GLint glprogram::get_attrib_location(const std::string& name) {
     auto it = m_attrib_loc.find(name);
     if (it != m_attrib_loc.end()) {
         return it->second;

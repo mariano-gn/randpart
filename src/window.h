@@ -41,13 +41,26 @@ public:
 
 private:
     glm::ivec2 m_size;
-    glm::mat4 m_vp;
     GLFWwindow* mp_impl;
     GLuint m_vao = 0;
     std::shared_ptr<glprogram> m_program;
     std::shared_ptr<particles> m_particles;
 
+    // Camera hadling & view-projection
+    glm::mat4 m_vp;
+    bool m_lmb_pressed = false;
+    glm::dvec2 m_mouse_pos_prev = {};
+    glm::dvec2 m_mouse_pos_curr = {};
+    double m_mouse_scroll_dt = 0;
+    void update_camera(float dt);
+
+
     void setup_gl();
+
+    static void key_callback(GLFWwindow* w_handle, int key, int scancode, int action, int mods);
+    static void cursor_position_callback(GLFWwindow* w_handle, double xpos, double ypos);
+    static void mouse_button_callback(GLFWwindow* w_handle, int button, int action, int mods);
+    static void scroll_callback(GLFWwindow* w_handle, double xoffset, double yoffset);
 };
 
 #endif // _WINDOW_H_

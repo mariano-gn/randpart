@@ -69,6 +69,12 @@ window::window(glm::ivec2&& size, std::string&& title)
 
     if (m_program) {
         m_particles = std::make_shared<particles>(m_program);
+        glfwSetWindowUserPointer(mp_impl, this);
+
+        glfwSetKeyCallback(mp_impl, window::key_callback);
+        glfwSetCursorPosCallback(mp_impl, window::cursor_position_callback);
+        glfwSetMouseButtonCallback(mp_impl, window::mouse_button_callback);
+        glfwSetScrollCallback(mp_impl, window::scroll_callback);
     }
 }
 
@@ -76,7 +82,6 @@ window::~window() {
     m_particles.reset();
     m_program.reset();
 
-    gl::DeleteVertexArrays(1, &m_vao);
     glfwTerminate();
 }
 
@@ -89,12 +94,14 @@ bool window::run() {
         while (!glfwWindowShouldClose(mp_impl)) {
             t.snap();
 
-            /* Update particles */
+            /* Update */
             m_particles->update(delta);
+            update_camera(delta);
 
             /* Render here */
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
             m_program->activate();
+
             gl::UniformMatrix4fv(m_program->get_uniform_location(kVP), 1, gl::FALSE_, glm::value_ptr(m_vp));
 
             m_particles->render();
@@ -116,10 +123,6 @@ void window::setup_gl() {
     gl::Enable(gl::CULL_FACE);
     gl::ClearColor(.0f, .0f, .0f, 1.0f);
 
-    /*vao*/
-    gl::GenVertexArrays(1, &m_vao);
-    gl::BindVertexArray(m_vao);
-
     /*view-projection*/
     m_vp = glm::perspective(glm::radians(45.f), m_size.x / (m_size.y * 1.f), 1.f, 10.f) *
         glm::lookAt(
@@ -132,4 +135,62 @@ void window::setup_gl() {
         { gl::VERTEX_SHADER, shaders::vertex::basic },
         { gl::FRAGMENT_SHADER, shaders::fragment::basic }
     }, { "outColor" });
+}
+
+void window::update_camera(const float /*dt*/) {
+    // Load current delta.
+    auto scroll_dt = m_mouse_scroll_dt;
+    auto move_dt = m_mouse_pos_curr - m_mouse_pos_prev;
+
+    // Reset state
+    m_mouse_pos_prev = m_mouse_pos_curr;
+    m_mouse_scroll_dt = 0;
+
+    static const float kZ_speed = 1.f;
+
+    if (scroll_dt != 0) {
+        LOGD(kTag, "Scroll delta ", scroll_dt);
+    }
+    if (move_dt.x != 0 || move_dt.y != 0) {
+        LOGD(kTag, "Move delta x: ", move_dt.x, " y: ", move_dt.y);
+    }
+}
+
+void window::key_callback(GLFWwindow* /*w_handle*/, int /*key*/, int /*scancode*/, int /*action*/, int /*mods*/) {
+    LOGD(kTag, "KeyCallback");
+}
+
+void window::cursor_position_callback(GLFWwindow* w_handle, double xpos, double ypos) {
+    window* event_handler = reinterpret_cast<window*>(glfwGetWindowUserPointer(w_handle));
+    if (event_handler) {
+        auto& w = *event_handler;
+        if (w.m_lmb_pressed) {
+            w.m_mouse_pos_curr.x = xpos;
+            w.m_mouse_pos_curr.y = ypos;
+        }
+    }
+}
+
+void window::mouse_button_callback(GLFWwindow* w_handle, int button, int action, int /*mods*/) {
+    window* event_handler = reinterpret_cast<window*>(glfwGetWindowUserPointer(w_handle));
+    if (event_handler) {
+        auto& w = *event_handler;
+        if (button == GLFW_MOUSE_BUTTON_LEFT) {
+            if (action == GLFW_PRESS) {
+                w.m_lmb_pressed = true; 
+                glfwGetCursorPos(w_handle, &w.m_mouse_pos_prev.x, &w.m_mouse_pos_prev.y);
+
+            } else if (action == GLFW_RELEASE) {
+                w.m_lmb_pressed = false;
+            }
+        }
+    }
+}
+
+void window::scroll_callback(GLFWwindow* w_handle, double /*xoffset*/, double yoffset) {
+    window* event_handler = reinterpret_cast<window*>(glfwGetWindowUserPointer(w_handle));
+    if (event_handler) {
+        auto& w = *event_handler;
+        w.m_mouse_scroll_dt += yoffset;
+    }
 }

@@ -46,14 +46,14 @@ public:
     ~glprogram();
 
     void activate();
-    GLuint get_uniform_location(const std::string& name);
-    GLuint get_attrib_location(const std::string& name);
+    GLint get_uniform_location(const std::string& name);
+    GLint get_attrib_location(const std::string& name);
 
 private:
     GLuint m_program;
-    std::unordered_map<std::string, GLuint> m_uniform_loc;
+    std::unordered_map<std::string, GLint> m_uniform_loc;
     // TODO: Possible optim, both maps into 1?
-    std::unordered_map<std::string, GLuint> m_attrib_loc;
+    std::unordered_map<std::string, GLint> m_attrib_loc;
 
     glprogram(const std::vector<GLuint>& shaders,
         const std::vector<std::string>& fs_out_variables);

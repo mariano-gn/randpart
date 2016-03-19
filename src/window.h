@@ -22,6 +22,7 @@ SOFTWARE.
 
 #ifndef _WINDOW_H_
 #define _WINDOW_H_
+#include "non-copyable.h"
 #include <gl_core_3_3_noext_pcpp.hpp>
 #include <glm/vec2.hpp>
 #include <glm/matrix.hpp>
@@ -32,7 +33,7 @@ class glprogram;
 class particles;
 struct GLFWwindow;
 
-class window {
+class window : public patterns::Non_Copyable {
 public:
     window(glm::ivec2&& size, std::string&& title);
     ~window();

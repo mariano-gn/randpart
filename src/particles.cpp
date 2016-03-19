@@ -21,14 +21,14 @@ SOFTWARE.
 */
 
 #include "particles.h"
+#include "glprogram.h"
 #include <logger.h>
 #include <glm/vec3.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <array>
 
 //static const char* const kTag = "particles";
 
-particles::particles(const GLuint programID, const uint32_t /*number*/) 
+particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t /*number*/)
     : m_particles(4/*number*/) {
     gl::PointSize(4);
     gl::GenBuffers(1, &m_vbo);
@@ -46,11 +46,11 @@ particles::particles(const GLuint programID, const uint32_t /*number*/)
     gl::BindBuffer(gl::ARRAY_BUFFER, m_vbo);
     gl::BufferData(gl::ARRAY_BUFFER, m_particles.size() * sizeof(particle_data), m_particles.data(), gl::DYNAMIC_DRAW);
 
-    GLint posAttrib = gl::GetAttribLocation(programID, "Position");
+    GLint posAttrib = active_program->get_attrib_location("Position");
     gl::EnableVertexAttribArray(posAttrib);
     gl::VertexAttribPointer(posAttrib, 3, gl::FLOAT, gl::FALSE_, sizeof(particle_data), nullptr);
 
-    GLint colAttrib = gl::GetAttribLocation(programID, "inColor");
+    GLint colAttrib = active_program->get_attrib_location("inColor");
     gl::EnableVertexAttribArray(colAttrib);
     gl::VertexAttribPointer(colAttrib, 3, gl::FLOAT, gl::FALSE_, sizeof(particle_data), (void*) sizeof(glm::vec3));
 

@@ -22,6 +22,7 @@ SOFTWARE.
 
 #include "window.h"
 #include "frags.h"
+#include "glprogram.h"
 #include "particles.h"
 #include "verts.h"
 #include <logger.h>
@@ -31,6 +32,7 @@ SOFTWARE.
 #include <glm/gtc/type_ptr.hpp>
 
 static const char* const kTag = "window";
+static const std::string kVP = "VP";
 
 window::window(glm::ivec2&& size, std::string&& title) 
     : m_size(std::move(size)) 
@@ -65,13 +67,15 @@ window::window(glm::ivec2&& size, std::string&& title)
 
     setup_gl();
 
-    m_particles = std::make_shared<particles>(m_program);
+    if (m_program) {
+        m_particles = std::make_shared<particles>(m_program);
+    }
 }
 
 window::~window() {
     m_particles.reset();
+    m_program.reset();
 
-    gl::DeleteProgram(m_program);
     gl::DeleteVertexArrays(1, &m_vao);
     glfwTerminate();
 }
@@ -80,7 +84,7 @@ bool window::run() {
     util::Timer<std::milli> t;
     float delta = 0.f;
 
-    if (mp_impl) {
+    if (mp_impl && m_program) {
         /* Loop until the user closes the window */
         while (!glfwWindowShouldClose(mp_impl)) {
             t.snap();
@@ -90,7 +94,8 @@ bool window::run() {
 
             /* Render here */
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-            gl::UniformMatrix4fv(m_vploc, 1, gl::FALSE_, glm::value_ptr(m_vp));
+            m_program->activate();
+            gl::UniformMatrix4fv(m_program->get_uniform_location(kVP), 1, gl::FALSE_, glm::value_ptr(m_vp));
 
             m_particles->render();
 
@@ -103,12 +108,13 @@ bool window::run() {
             delta = t.get_delta<float>();
         }
     }
-    return (mp_impl != nullptr);
+    return (mp_impl != nullptr && m_program != nullptr);
 }
 
 void window::setup_gl() {
     gl::Enable(gl::DEPTH_TEST);
     gl::Enable(gl::CULL_FACE);
+    gl::ClearColor(.0f, .0f, .0f, 1.0f);
 
     /*vao*/
     gl::GenVertexArrays(1, &m_vao);
@@ -122,55 +128,8 @@ void window::setup_gl() {
             glm::vec3{ 0., 1., 0. });
 
     /*shaders*/
-    // TODO: Validate, error handling, etc.!
-    GLuint vertexShader = gl::CreateShader(gl::VERTEX_SHADER);
-    gl::ShaderSource(vertexShader, 1, &shaders::vertex::basic, nullptr);
-    gl::CompileShader(vertexShader);
-
-    int compiled_vs, compiled_fs, linked, max_length;
-    gl::GetShaderiv(vertexShader, gl::COMPILE_STATUS, &compiled_vs);
-    if (compiled_vs == gl::FALSE_) {
-        gl::GetShaderiv(vertexShader, gl::INFO_LOG_LENGTH, &max_length);
-
-        std::vector<char> infoLog(max_length);
-        gl::GetShaderInfoLog(vertexShader, max_length, &max_length, infoLog.data());
-        LOGD(kTag, std::string(infoLog.begin(), infoLog.end()));
-    }
-
-    GLuint fragmentShader = gl::CreateShader(gl::FRAGMENT_SHADER);
-    gl::ShaderSource(fragmentShader, 1, &shaders::fragment::basic, nullptr);
-    gl::CompileShader(fragmentShader);
-
-    gl::GetShaderiv(fragmentShader, gl::COMPILE_STATUS, &compiled_fs);
-    if (compiled_fs == gl::FALSE_) {
-        gl::GetShaderiv(fragmentShader, gl::INFO_LOG_LENGTH, &max_length);
-
-        std::vector<char> infoLog(max_length);
-        gl::GetShaderInfoLog(fragmentShader, max_length, &max_length, infoLog.data());
-        LOGD(kTag, std::string(infoLog.begin(), infoLog.end()));
-    }
-
-    m_program = gl::CreateProgram();
-    gl::AttachShader(m_program, vertexShader);
-    gl::AttachShader(m_program, fragmentShader);
-    gl::BindFragDataLocation(m_program, 0, "outColor");
-    gl::LinkProgram(m_program);
-
-    gl::GetProgramiv(m_program, gl::LINK_STATUS, &linked);
-    if (linked == gl::FALSE_) {
-        gl::GetProgramiv(m_program, gl::INFO_LOG_LENGTH, &max_length);
-
-        std::vector<char> infoLog(max_length);
-        gl::GetProgramInfoLog(m_program, max_length, &max_length, infoLog.data());
-        LOGD(kTag, std::string(infoLog.begin(), infoLog.end()));
-    }
-
-    gl::UseProgram(m_program);
-
-    gl::DeleteShader(vertexShader);
-    gl::DeleteShader(fragmentShader);
-
-    gl::ClearColor(.0f, .0f, .0f, 1.0f);
-
-    m_vploc = gl::GetUniformLocation(m_program, "VP");
+    m_program = glprogram::make_program({
+        { gl::VERTEX_SHADER, shaders::vertex::basic },
+        { gl::FRAGMENT_SHADER, shaders::fragment::basic }
+    }, { "outColor" });
 }

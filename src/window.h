@@ -28,6 +28,7 @@ SOFTWARE.
 #include <memory>
 #include <string>
 
+class glprogram;
 class particles;
 struct GLFWwindow;
 
@@ -42,7 +43,8 @@ private:
     glm::ivec2 m_size;
     glm::mat4 m_vp;
     GLFWwindow* mp_impl;
-    GLuint m_vao = 0, m_program = 0, m_vploc = 0;
+    GLuint m_vao = 0;
+    std::shared_ptr<glprogram> m_program;
     std::shared_ptr<particles> m_particles;
 
     void setup_gl();

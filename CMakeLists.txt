@@ -31,6 +31,7 @@ set(GLLOADGEN_SOURCES
 #Project files
 include_directories("./src")
 set(RANDPART_SOURCES
+	"src/glprogram.cpp"
 	"src/main.cpp"
 	"src/particles.cpp"
 	"src/window.cpp"

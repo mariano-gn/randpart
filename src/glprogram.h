@@ -20,40 +20,43 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "window.h"
-#include <GLFW/glfw3.h>
-#include <logger.h>
+#ifndef _GLPROGRAM_H_
+#define _GLPROGRAM_H_
+#include <gl_core_3_3_noext_pcpp.hpp>
 #include <memory>
+#include <string>
+#include <vector>
+#include <unordered_map>
 
-// TODO: Validation, error handling, etc.!
+struct shader_def {
+    using shader_t = decltype(gl::VERTEX_SHADER);
+    using source_t = const char* const;
+    const shader_t m_type;
+    source_t m_source;
 
-#ifdef _LOG
-void error_cb(int code, const char* str) {
-    LOGD("GLFW", "Error code ", code, ", text: ", str);
-}
-#endif
+    shader_def(shader_t type, source_t source)
+        : m_type(type)
+        , m_source(source) {}
+};
 
-std::shared_ptr<window> init(int w, int h, const char* title) {
-    debug::Logger_Config lg{};
-    lg.logger_types = debug::fType::CONSOLE;
-    debug::Logger::init(lg);
+class glprogram {
+public:
+    static std::shared_ptr<glprogram> make_program(const std::vector<shader_def>& shaders, 
+        const std::vector<std::string>& fs_out_variables);
+    ~glprogram();
 
-#ifdef _LOG
-    glfwSetErrorCallback(error_cb);
-#endif
+    void activate();
+    GLuint get_uniform_location(const std::string& name);
+    GLuint get_attrib_location(const std::string& name);
 
-    return std::make_shared<window>(glm::ivec2{ w, h }, std::string{ title });
-}
+private:
+    GLuint m_program;
+    std::unordered_map<std::string, GLuint> m_uniform_loc;
+    // TODO: Possible optim, both maps into 1?
+    std::unordered_map<std::string, GLuint> m_attrib_loc;
 
-void shutdown(std::shared_ptr<window> wnd) {
-    wnd.reset();
-    debug::Logger::destroy();
-}
+    glprogram(const std::vector<GLuint>& shaders,
+        const std::vector<std::string>& fs_out_variables);
+};
 
-int main() {
-    auto w = init(1024, 768, "Random numbers and particles!");
-    const auto exit_value = w->run() ? 0 : -1;
-    shutdown(w);
-    return exit_value;
-}
-
+#endif // _GLPROGRAM_H_

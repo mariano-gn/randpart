@@ -20,33 +20,39 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#ifndef _PARTICLES_H_
-#define _PARTICLES_H_
+#ifndef _GLUTILS_H_
+#define _GLUTILS_H_
+#include <logger.h>
 #include <gl_core_3_3_noext_pcpp.hpp>
-#include <glm/vec3.hpp>
-#include <cstdint>
-#include <memory>
-#include <vector>
 
-class glprogram;
+#ifdef _DEBUG
+#define CHECK_GL_ERRORS() gl::utils::debug_check_error(__FILE__, __LINE__)
+#else
+#define CHECK_GL_ERRORS()
+#endif // _DEBUG
 
-struct particle_data {
-    glm::vec3 pos;
-    glm::vec3 color;
-};
+namespace gl {
+    namespace utils {
+        inline const char* get_string(GLenum e) {
+            switch (e) {
+            case gl::NO_ERROR_: return "No error";
+            case gl::INVALID_ENUM: return "Invalid enum";
+            case gl::INVALID_VALUE: return "Invalid value";
+            case gl::INVALID_OPERATION: return "Invalid operation";
+            case gl::INVALID_FRAMEBUFFER_OPERATION: return "Invalid framebuffer operation";
+            case gl::OUT_OF_MEMORY: return "Out of memory";
+            default: return "Unknown error";
+            }
+        }
 
-class particles {
-public:
-    // TODO: Changes in program?
-    particles(std::shared_ptr<glprogram> active_program, uint32_t number = 4);
-    ~particles();
+        inline void debug_check_error(const char* file, int line) {
+            auto e = gl::GetError();
+            while (e != gl::NO_ERROR_) {
+                LOGD("OpenGL error: ", get_string(e), ", in: ", file, ":", line);
+                e = gl::GetError();
+            }
+        }
+    }
+}
 
-    void render();
-    void update(float dt);
-
-private:
-    GLuint m_vbo, m_ebo;
-    std::vector<particle_data> m_particles;
-};
-
-#endif // _PARTICLES_H_
+#endif // _GLUTILS_H_

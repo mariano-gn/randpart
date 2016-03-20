@@ -22,7 +22,8 @@ SOFTWARE.
 
 #ifndef _WINDOW_H_
 #define _WINDOW_H_
-#include "non-copyable.h"
+#include "camera.h"
+#include <non-copyable.h>
 #include <gl_core_3_3_noext_pcpp.hpp>
 #include <glm/vec2.hpp>
 #include <glm/matrix.hpp>
@@ -46,15 +47,14 @@ private:
     GLuint m_vao = 0;
     std::shared_ptr<glprogram> m_program;
     std::shared_ptr<particles> m_particles;
+    camera m_camera;
 
-    // Camera hadling & view-projection
-    glm::mat4 m_vp;
-    bool m_lmb_pressed = false;
-    glm::dvec2 m_mouse_pos_prev = {};
-    glm::dvec2 m_mouse_pos_curr = {};
-    double m_mouse_scroll_dt = 0;
+    // Camera hadling
+    bool m_lmb_pressed = false, m_rmb_pressed = false;
+    glm::vec2 m_mouse_pos_lprev, m_mouse_pos_rprev = {};
+    glm::vec2 m_mouse_pos_lcurr, m_mouse_pos_rcurr = {};
+    float m_mouse_scroll_dt = 0;
     void update_camera(float dt);
-
 
     void setup_gl();
 

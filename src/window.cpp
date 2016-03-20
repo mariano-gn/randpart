@@ -21,6 +21,7 @@ SOFTWARE.
 */
 
 #include "window.h"
+#include "camera.h"
 #include "frags.h"
 #include "glprogram.h"
 #include "particles.h"
@@ -36,7 +37,8 @@ static const std::string kVP = "VP";
 
 window::window(glm::ivec2&& size, std::string&& title) 
     : m_size(std::move(size)) 
-    , mp_impl(nullptr) {
+    , mp_impl(nullptr)
+    , m_camera(glm::vec2(size.x, size.y)) {
     /* Initialize the library */
     if (!glfwInit()) {
         return;
@@ -102,7 +104,7 @@ bool window::run() {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
             m_program->activate();
 
-            gl::UniformMatrix4fv(m_program->get_uniform_location(kVP), 1, gl::FALSE_, glm::value_ptr(m_vp));
+            gl::UniformMatrix4fv(m_program->get_uniform_location(kVP), 1, gl::FALSE_, glm::value_ptr(m_camera.get_vp()));
 
             m_particles->render();
 
@@ -123,13 +125,6 @@ void window::setup_gl() {
     gl::Enable(gl::CULL_FACE);
     gl::ClearColor(.0f, .0f, .0f, 1.0f);
 
-    /*view-projection*/
-    m_vp = glm::perspective(glm::radians(45.f), m_size.x / (m_size.y * 1.f), 1.f, 10.f) *
-        glm::lookAt(
-            glm::vec3{ 0., 0., 5. },
-            glm::vec3{ 0., 0., 0. },
-            glm::vec3{ 0., 1., 0. });
-
     /*shaders*/
     m_program = glprogram::make_program({
         { gl::VERTEX_SHADER, shaders::vertex::basic },
@@ -137,27 +132,36 @@ void window::setup_gl() {
     }, { "outColor" });
 }
 
-void window::update_camera(const float /*dt*/) {
-    // Load current delta.
+void window::update_camera(const float dt) {
+    // Load current deltas.
     auto scroll_dt = m_mouse_scroll_dt;
-    auto move_dt = m_mouse_pos_curr - m_mouse_pos_prev;
+    auto orbit_dt = m_mouse_pos_lcurr - m_mouse_pos_lprev;
+    auto pan_dt = m_mouse_pos_rcurr - m_mouse_pos_rprev;
 
     // Reset state
-    m_mouse_pos_prev = m_mouse_pos_curr;
+    m_mouse_pos_lprev = m_mouse_pos_lcurr;
+    m_mouse_pos_rprev = m_mouse_pos_rcurr;
     m_mouse_scroll_dt = 0;
 
-    static const float kZ_speed = 1.f;
-
     if (scroll_dt != 0) {
-        LOGD(kTag, "Scroll delta ", scroll_dt);
+        m_camera.dolly(static_cast<float>(scroll_dt / dt));
     }
-    if (move_dt.x != 0 || move_dt.y != 0) {
-        LOGD(kTag, "Move delta x: ", move_dt.x, " y: ", move_dt.y);
+    if (orbit_dt.x != 0 || orbit_dt.y != 0) {
+        m_camera.orbit(orbit_dt / dt);
+    }
+    if (pan_dt.x != 0 || pan_dt.y != 0) {
+        m_camera.pan(pan_dt / dt);
     }
 }
 
-void window::key_callback(GLFWwindow* /*w_handle*/, int /*key*/, int /*scancode*/, int /*action*/, int /*mods*/) {
-    LOGD(kTag, "KeyCallback");
+void window::key_callback(GLFWwindow* w_handle, int key, int /*scancode*/, int action, int /*mods*/) {
+    window* event_handler = reinterpret_cast<window*>(glfwGetWindowUserPointer(w_handle));
+    if (event_handler) {
+        auto& w = *event_handler;
+        if (key == GLFW_KEY_H && action == GLFW_RELEASE) {
+            w.m_camera.home();
+        }
+    }
 }
 
 void window::cursor_position_callback(GLFWwindow* w_handle, double xpos, double ypos) {
@@ -165,8 +169,12 @@ void window::cursor_position_callback(GLFWwindow* w_handle, double xpos, double 
     if (event_handler) {
         auto& w = *event_handler;
         if (w.m_lmb_pressed) {
-            w.m_mouse_pos_curr.x = xpos;
-            w.m_mouse_pos_curr.y = ypos;
+            w.m_mouse_pos_lcurr.x = static_cast<float>(xpos);
+            w.m_mouse_pos_lcurr.y = static_cast<float>(ypos);
+        }
+        if (w.m_rmb_pressed) {
+            w.m_mouse_pos_rcurr.x = static_cast<float>(xpos);
+            w.m_mouse_pos_rcurr.y = static_cast<float>(ypos);
         }
     }
 }
@@ -175,13 +183,21 @@ void window::mouse_button_callback(GLFWwindow* w_handle, int button, int action,
     window* event_handler = reinterpret_cast<window*>(glfwGetWindowUserPointer(w_handle));
     if (event_handler) {
         auto& w = *event_handler;
-        if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            if (action == GLFW_PRESS) {
-                w.m_lmb_pressed = true; 
-                glfwGetCursorPos(w_handle, &w.m_mouse_pos_prev.x, &w.m_mouse_pos_prev.y);
-
-            } else if (action == GLFW_RELEASE) {
+        if (action == GLFW_PRESS) {
+            double x, y;
+            glfwGetCursorPos(w_handle, &x, &y);
+            if (button == GLFW_MOUSE_BUTTON_LEFT) {
+                w.m_lmb_pressed = true;
+                w.m_mouse_pos_lcurr = w.m_mouse_pos_lprev = glm::vec2(x, y);
+            } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+                w.m_rmb_pressed = true;
+                w.m_mouse_pos_rcurr = w.m_mouse_pos_rprev = glm::vec2(x, y);
+            }
+        } else if (action == GLFW_RELEASE) {
+            if (button == GLFW_MOUSE_BUTTON_LEFT) {
                 w.m_lmb_pressed = false;
+            } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+                w.m_rmb_pressed = false;
             }
         }
     }
@@ -191,6 +207,6 @@ void window::scroll_callback(GLFWwindow* w_handle, double /*xoffset*/, double yo
     window* event_handler = reinterpret_cast<window*>(glfwGetWindowUserPointer(w_handle));
     if (event_handler) {
         auto& w = *event_handler;
-        w.m_mouse_scroll_dt += yoffset;
+        w.m_mouse_scroll_dt += static_cast<float>(yoffset);
     }
 }

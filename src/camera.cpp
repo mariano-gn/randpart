@@ -25,6 +25,7 @@ SOFTWARE.
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/norm.hpp>
+#include <glm/gtx/transform.hpp>
 #include <glm/common.hpp>
 
 camera::camera(const glm::vec2& screen) 
@@ -36,23 +37,6 @@ void camera::home() {
     m_pos = glm::vec3{ 0.f, 0.f, 5.f };
     m_lookAt = glm::vec3{ 0.f, 0.f, 0.f };
     m_up = glm::vec3{ 0.f, 1.f, 0.f };
-    m_dirty = true;
-}
-
-void camera::orbit(const glm::vec2& dd) {
-    // TODO: Implement better orbit code. This is garbage :)
-    auto adjusted_dd = dd * m_orbit_vel;
-
-    auto rev_foward = m_pos - m_lookAt;
-    auto len_rf = glm::length(rev_foward);
-    rev_foward = glm::normalize(rev_foward);
-    auto right_move = glm::normalize(glm::cross(m_up, rev_foward)) * -adjusted_dd.x;
-    auto up_move = m_up * adjusted_dd.y;
-    auto move = up_move + right_move;
-
-    m_pos += move;
-    rev_foward = glm::normalize(m_pos - m_lookAt) * len_rf;
-    m_pos = m_lookAt + rev_foward;
     m_dirty = true;
 }
 
@@ -77,6 +61,20 @@ void camera::pan(const glm::vec2& dd) {
     m_pos += move;
     m_lookAt += move;
     m_dirty = true;
+}
+
+void camera::orbit(const glm::vec2& dd) {
+	// TODO: Orbit with hit point always below mouse (using mouse screenpos)
+	auto adjusted_dd = dd * m_orbit_vel;
+	auto rev_foward = m_pos - m_lookAt;
+	const auto len_rf = glm::length(rev_foward);
+	rev_foward = glm::normalize(rev_foward);
+
+	const auto h_rot = glm::rotate(glm::radians(-adjusted_dd.x), m_up);
+	const auto v_rot = glm::rotate(glm::radians(-adjusted_dd.y), glm::normalize(glm::cross(m_up, rev_foward)));
+	m_pos = m_lookAt + glm::vec3{ h_rot * v_rot * glm::vec4{ rev_foward, 0.f } } * len_rf;
+	m_up = glm::vec3{ v_rot * glm::vec4{ m_up, 0.f } };
+	m_dirty = true;
 }
 
 const glm::mat4x4& camera::get_vp() const {

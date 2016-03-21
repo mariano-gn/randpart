@@ -31,9 +31,9 @@ public:
     camera(const glm::vec2& screen);
     void home();
 
-    void orbit(const glm::vec2& dd);
     void dolly(float dz);
     void pan(const glm::vec2& dd);
+	void orbit(const glm::vec2& dd);
 
     const glm::mat4x4& get_vp() const;
 
@@ -42,7 +42,7 @@ private:
     glm::vec3 m_pos, m_lookAt, m_up;
     float m_pan_vel = .1f;
     float m_dolly_vel = 3.f;
-    float m_orbit_vel = 1.f;
+    float m_orbit_vel = 4.f;
     
     glm::mat4x4 m_projection;
     mutable glm::mat4x4 m_vp;

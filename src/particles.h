@@ -30,15 +30,28 @@ SOFTWARE.
 
 class glprogram;
 
-struct particle_data {
+struct particle_render_data {
     glm::vec3 pos;
     glm::vec3 color;
+};
+
+struct particle_data {
+	float alive = true;
+};
+
+enum class particle_layout_type : short {
+	RANDOM_NOT_EVEN,
+	RANDOM_DISCARD_UNWANTED,
+	RANDOM_ANGLES
 };
 
 class particles {
 public:
     // TODO: Changes in program?
-    particles(std::shared_ptr<glprogram> active_program, uint32_t number = 4);
+    particles(
+		std::shared_ptr<glprogram> active_program, 
+		uint32_t number = 10000,
+		particle_layout_type lt = particle_layout_type::RANDOM_NOT_EVEN);
     ~particles();
 
     void render();
@@ -46,7 +59,9 @@ public:
 
 private:
     GLuint m_vao, m_vbo, m_ebo;
-    std::vector<particle_data> m_particles;
+	particle_layout_type m_lt;
+    std::vector<particle_render_data> m_particles_render_data;
+	std::vector<particle_data> m_particles_data;
 
     void init_particles();
     void setup_gl(std::shared_ptr<glprogram> active_program);

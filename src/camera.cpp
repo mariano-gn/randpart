@@ -34,7 +34,7 @@ camera::camera(const glm::vec2& screen)
 }
 
 void camera::home() {
-    m_pos = glm::vec3{ 0.f, 0.f, 5.f };
+    m_pos = glm::vec3{ 0.f, 0.f, 2.7f };
     m_lookAt = glm::vec3{ 0.f, 0.f, 0.f };
     m_up = glm::vec3{ 0.f, 1.f, 0.f };
     m_dirty = true;

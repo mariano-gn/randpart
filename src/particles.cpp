@@ -27,12 +27,17 @@ SOFTWARE.
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/norm.hpp>
 #include <glm/gtx/transform.hpp>
+#include <numeric>
+#include <random>
 
 //static const char* const kTag = "particles";
 
-particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t /*number*/)
-    : m_particles(4/*number*/) {
+particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t number, const particle_layout_type lt)
+    : m_particles_render_data(number) 
+	, m_particles_data(number)
+	, m_lt(lt) {
     init_particles();
     setup_gl(active_program);
 }
@@ -47,34 +52,100 @@ particles::~particles() {
 void particles::render() {
     gl::BindVertexArray(m_vao);
     CHECK_GL_ERRORS();
-
-    gl::DrawElements(gl::TRIANGLE_STRIP, 6, gl::UNSIGNED_INT, 0);
+	GLsizei count = m_particles_render_data.size();
+    gl::DrawElements(gl::POINTS, count, gl::UNSIGNED_INT, 0);
     CHECK_GL_ERRORS();
     gl::BindVertexArray(0);
+	CHECK_GL_ERRORS();
 }
 
 void particles::update(const float /*dt*/) {
-    // TODO: Lifecycle.
+	static const auto kBlack = glm::vec3(0.f, 0.f, 0.f);
+	// TODO: Move this to class.
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_real_distribution<> dis_m11(-1., 1.);
+	std::uniform_real_distribution<> dis01(0., 1.);
+	static const auto rng_m11 = [&gen, &dis_m11]() {
+		return dis_m11(gen);
+	};
+	static const auto rng_dis01 = [&gen, &dis01]() {
+		return dis01(gen);
+	};
+
+	for (auto ix = 0u; ix < m_particles_data.size(); ix++) {
+		if (m_particles_data[ix].alive) {
+			m_particles_data[ix].alive = rng_dis01() < .9;
+		} else {
+			if (rng_dis01() < .2) {
+				m_particles_data[ix].alive = true;
+				// TODO: Move this too...
+				m_particles_render_data[ix].color = glm::vec3(rng_dis01(), rng_dis01(), rng_dis01());
+				glm::vec3 candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
+				switch (m_lt) {
+				case particle_layout_type::RANDOM_NOT_EVEN: {
+					// It's ok as is.
+				} break;
+				case particle_layout_type::RANDOM_DISCARD_UNWANTED: {
+					while (glm::length2(candidate) > 1.f) {
+						candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
+					}
+				} break;
+				case particle_layout_type::RANDOM_ANGLES:
+				default: {
+					SPL_FALSE_ASSERT("Sorry, it's not implemented yet.");
+				} break;
+				}
+				m_particles_render_data[ix].pos = glm::normalize(candidate);
+			} else {
+				// TODO: Enable blending, use alpha and make particles fade to completely transparent.
+				m_particles_render_data[ix].color = kBlack;
+			}
+		}
+	}
+
+	gl::BindVertexArray(m_vao);
+	gl::BufferData(gl::ARRAY_BUFFER, m_particles_render_data.size() * sizeof(particle_render_data), m_particles_render_data.data(), gl::DYNAMIC_DRAW);
+	gl::BindVertexArray(0);
+	CHECK_GL_ERRORS();
 }
 
 void particles::init_particles() {
-    // TODO: Random.
-    const auto edge_len = 3;
-    const auto height = std::sqrt(6);
-    const auto face_height = (std::sqrt(3) / 2) * edge_len;
-    m_particles[0].pos = glm::vec3{ 0., height/2.f, 0. };
-    m_particles[1].pos = glm::vec3{ -edge_len / 2.f, -height / 2.f, face_height / 3.f };
-    m_particles[2].pos = glm::vec3{ edge_len / 2.f, -height / 2.f, face_height/3.f };
-    m_particles[3].pos = glm::vec3{ 0.f, -height / 2.f, -2.f * (face_height /3.f) };
+	// Disabling random device for visual debug.
+	//std::random_device rd;
+	std::mt19937 gen(0/*rd()*/);
+	std::uniform_real_distribution<> dis_m11(-1., 1.);
+	std::uniform_real_distribution<> dis01(0., 1.);
+	static const auto rng_m11 = [&gen, &dis_m11]() {
+		return dis_m11(gen);
+	};
+	static const auto rng_dis01 = [&gen, &dis01]() {
+		return dis01(gen);
+	};
 
-    m_particles[0].color = glm::vec3{ 1.f,  0.f, 0.f };
-    m_particles[1].color = glm::vec3{ 0.f,  1.f, 0.f };
-    m_particles[2].color = glm::vec3{ 0.f,  0.f, 1.f };
-    m_particles[3].color = glm::vec3{ 1.f,  1.f, 1.f };
+	for (auto ix = 0u; ix < m_particles_render_data.size(); ix++) {
+		m_particles_render_data[ix].color = glm::vec3(rng_dis01(), rng_dis01(), rng_dis01());
+		glm::vec3 candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
+		switch (m_lt) {
+			case particle_layout_type::RANDOM_NOT_EVEN: {
+				// It's ok as is.
+			} break;
+			case particle_layout_type::RANDOM_DISCARD_UNWANTED: {
+				while (glm::length2(candidate) > 1.f) {
+					candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
+				}
+			} break;
+			case particle_layout_type::RANDOM_ANGLES:
+			default: {
+				SPL_FALSE_ASSERT("Sorry, it's not implemented yet.");
+			} break;
+		}
+		m_particles_render_data[ix].pos = glm::normalize(candidate);
+	}
 }
 
 void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
-    gl::PointSize(4);
+    gl::PointSize(1);
     gl::GenVertexArrays(1, &m_vao);
     gl::BindVertexArray(m_vao);
     gl::GenBuffers(1, &m_vbo);
@@ -82,29 +153,24 @@ void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
     CHECK_GL_ERRORS();
 
     gl::BindBuffer(gl::ARRAY_BUFFER, m_vbo);
-    gl::BufferData(gl::ARRAY_BUFFER, m_particles.size() * sizeof(particle_data), m_particles.data(), gl::DYNAMIC_DRAW);
+    gl::BufferData(gl::ARRAY_BUFFER, m_particles_render_data.size() * sizeof(particle_render_data), m_particles_render_data.data(), gl::DYNAMIC_DRAW);
     CHECK_GL_ERRORS();
 
     GLint posAttrib = active_program->get_attrib_location("Position");
     gl::EnableVertexAttribArray(posAttrib);
-    gl::VertexAttribPointer(posAttrib, 3, gl::FLOAT, gl::FALSE_, sizeof(particle_data), nullptr);
+    gl::VertexAttribPointer(posAttrib, 3, gl::FLOAT, gl::FALSE_, sizeof(particle_render_data), nullptr);
     CHECK_GL_ERRORS();
 
     GLint colAttrib = active_program->get_attrib_location("inColor");
     gl::EnableVertexAttribArray(colAttrib);
-    gl::VertexAttribPointer(colAttrib, 3, gl::FLOAT, gl::FALSE_, sizeof(particle_data), (void*) sizeof(glm::vec3));
+    gl::VertexAttribPointer(colAttrib, 3, gl::FLOAT, gl::FALSE_, sizeof(particle_render_data), (void*) sizeof(glm::vec3));
     CHECK_GL_ERRORS();
 
-
-    //GLuint elements[] = {
-    //    0,1,2, 0,2,3, 0,3,1, 1,3,2
-    //};
-    GLuint elements[] = {
-        0,1,2,3,0,1
-    };
+	std::vector<GLuint> elements(m_particles_render_data.size());
+	std::iota(std::begin(elements), std::end(elements), 0);
 
     gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, m_ebo);
-    gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, sizeof(elements), elements, gl::STATIC_DRAW);
+    gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, elements.size() * sizeof(GLuint), elements.data(), gl::STATIC_DRAW);
     gl::BindVertexArray(0);
     CHECK_GL_ERRORS();
 }

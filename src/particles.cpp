@@ -35,9 +35,10 @@ SOFTWARE.
 //static const char* const kTag = "particles";
 
 particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t number, const particle_layout_type lt)
-    : m_particles_render_data(number) 
+    : m_lt(lt)
+	, m_particles_render_data(number)
 	, m_particles_data(number)
-	, m_lt(lt) {
+	, m_particle_distances(number) {
     init_particles();
     setup_gl(active_program);
 }
@@ -142,6 +143,7 @@ void particles::init_particles() {
 		}
 		m_particles_render_data[ix].pos = glm::normalize(candidate);
 	}
+	calculate_distances();
 }
 
 void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
@@ -173,4 +175,17 @@ void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
     gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, elements.size() * sizeof(GLuint), elements.data(), gl::STATIC_DRAW);
     gl::BindVertexArray(0);
     CHECK_GL_ERRORS();
+}
+
+void particles::calculate_distances() {
+	// TODO: Performance of this vs filling all in one pass (m_particles_distances[row][col] = m_particle_distances[col][row] = value)
+	// Fill the distance matrix
+	// First fill the lower triangle.
+	for (auto rowix = 0u; rowix < m_particle_distances.size(); rowix++) {
+		auto& row = m_particle_distances[rowix];
+		for (auto colix = 0u; colix < rowix; colix++) {
+			row.push_back(glm::distance2(m_particles_render_data[rowix].pos, m_particles_render_data[colix].pos));
+		}
+		row.push_back(0); // rowix == colix;
+	}
 }

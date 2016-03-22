@@ -50,7 +50,7 @@ public:
     // TODO: Changes in program?
     particles(
 		std::shared_ptr<glprogram> active_program, 
-		uint32_t number = 10000,
+		uint32_t number = 1000,
 		particle_layout_type lt = particle_layout_type::RANDOM_NOT_EVEN);
     ~particles();
 
@@ -62,9 +62,11 @@ private:
 	particle_layout_type m_lt;
     std::vector<particle_render_data> m_particles_render_data;
 	std::vector<particle_data> m_particles_data;
+	std::vector<std::vector<float>> m_particle_distances;
 
     void init_particles();
     void setup_gl(std::shared_ptr<glprogram> active_program);
+	void calculate_distances();
 };
 
 #endif // _PARTICLES_H_

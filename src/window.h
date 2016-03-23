@@ -44,7 +44,6 @@ public:
 private:
     glm::ivec2 m_size;
     GLFWwindow* mp_impl;
-    GLuint m_vao = 0;
     std::shared_ptr<glprogram> m_program;
     std::shared_ptr<particles> m_particles;
     camera m_camera;

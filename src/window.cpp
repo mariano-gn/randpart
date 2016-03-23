@@ -32,7 +32,6 @@ SOFTWARE.
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-static const char* const kTag = "window";
 static const std::string kVP = "VP";
 
 window::window(glm::ivec2&& size, std::string&& title) 

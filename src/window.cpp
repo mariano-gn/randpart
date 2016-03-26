@@ -35,9 +35,9 @@ SOFTWARE.
 static const std::string kVP = "VP";
 
 window::window(glm::ivec2&& size, std::string&& title) 
-    : m_size(std::move(size)) 
+    : m_size(size)
     , mp_impl(nullptr)
-    , m_camera(glm::vec2(size.x, size.y)) {
+    , m_camera(glm::vec2{ m_size }) {
     /* Initialize the library */
     if (!glfwInit()) {
         return;
@@ -76,6 +76,7 @@ window::window(glm::ivec2&& size, std::string&& title)
         glfwSetCursorPosCallback(mp_impl, window::cursor_position_callback);
         glfwSetMouseButtonCallback(mp_impl, window::mouse_button_callback);
         glfwSetScrollCallback(mp_impl, window::scroll_callback);
+        glfwSetFramebufferSizeCallback(mp_impl, window::framebuffer_size_callback);
     }
 }
 
@@ -96,6 +97,11 @@ bool window::run() {
             t.snap();
 
             /* Update */
+            if (m_screen_change) {
+                m_camera.screen_change(glm::vec2{ m_size });
+                gl::Viewport(0, 0, (GLsizei)m_size.x, (GLsizei)m_size.y);
+                m_screen_change = false;
+            }
             m_particles->update(delta);
             update_camera(delta);
 
@@ -157,8 +163,18 @@ void window::key_callback(GLFWwindow* w_handle, int key, int /*scancode*/, int a
     window* event_handler = reinterpret_cast<window*>(glfwGetWindowUserPointer(w_handle));
     if (event_handler) {
         auto& w = *event_handler;
-        if (key == GLFW_KEY_H && action == GLFW_RELEASE) {
-            w.m_camera.home();
+        if (action == GLFW_RELEASE) {
+            if (key == GLFW_KEY_H) {
+                w.m_camera.home();
+            } else if (key == GLFW_KEY_1) {
+                w.m_particles->set_particle_layout(particle_layout_type::RANDOM_CARTESIAN_NAIVE);
+            } else if (key == GLFW_KEY_2) {
+                w.m_particles->set_particle_layout(particle_layout_type::RANDOM_CARTESIAN_DISCARD);
+            } else if (key == GLFW_KEY_3) {
+                w.m_particles->set_particle_layout(particle_layout_type::RANDOM_SPHERICAL_NAIVE);
+            } else if (key == GLFW_KEY_4) {
+                w.m_particles->set_particle_layout(particle_layout_type::RANDOM_SPHERICAL_LATITUDE);
+            }
         }
     }
 }
@@ -207,5 +223,15 @@ void window::scroll_callback(GLFWwindow* w_handle, double /*xoffset*/, double yo
     if (event_handler) {
         auto& w = *event_handler;
         w.m_mouse_scroll_dt += static_cast<float>(yoffset);
+    }
+}
+
+void window::framebuffer_size_callback(GLFWwindow* w_handle, int width, int height) {
+    window* event_handler = reinterpret_cast<window*>(glfwGetWindowUserPointer(w_handle));
+    if (event_handler) {
+        auto& w = *event_handler;
+        w.m_screen_change = true;
+        w.m_size.x = width;
+        w.m_size.y = height;
     }
 }

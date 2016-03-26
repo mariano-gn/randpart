@@ -22,11 +22,49 @@ SOFTWARE.
 
 #ifndef _PARTICLES_H_
 #define _PARTICLES_H_
+#include "spp.h"
 #include <gl_core_3_3_noext_pcpp.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <vector>
+
+namespace util {
+    namespace math {
+        constexpr double pi = 3.141592653589793238462643383279502884;
+        constexpr double twoPi = 2. * pi;
+    }
+    namespace coords {
+        inline glm::vec2 get_unit_sphere(const glm::vec3& cartesian) {
+            return glm::vec2{
+                std::atan2(cartesian.y, cartesian.x), //theta = x
+                std::acos(cartesian.z) //phi = y
+            };
+        }
+
+        inline glm::vec3 get_unit_cartesian(const glm::vec2& sphere) {
+            auto sy = std::sin(sphere.y);
+            return glm::vec3{
+                std::cos(sphere.x) * sy,
+                std::sin(sphere.x) * sy,
+                std::cos(sphere.y)
+            };
+        }
+
+        inline glm::vec3 get_unit_cartesian(const float e0, const float e1) {
+            const auto z = 1.f - 2.f * e0;
+            const auto r = std::sqrt(1.f - z * z);
+            const auto theta = 2.f * util::math::pi * e1;
+            return glm::vec3{
+                r * std::cos(theta),
+                r * std::sin(theta),
+                z
+            };
+        }
+    }
+}
 
 class glprogram;
 
@@ -41,9 +79,10 @@ struct particle_data {
 };
 
 enum class particle_layout_type : short {
-	RANDOM_NOT_EVEN,
-	RANDOM_DISCARD_UNWANTED,
-	RANDOM_ANGLES
+	RANDOM_CARTESIAN_NAIVE,
+	RANDOM_CARTESIAN_DISCARD,
+	RANDOM_SPHERICAL_NAIVE,
+    RANDOM_SPHERICAL_LATITUDE,
 };
 
 class particles {
@@ -51,10 +90,11 @@ public:
     // TODO: Changes in program?
     particles(
 		std::shared_ptr<glprogram> active_program, 
-		uint32_t number = 20000,
-		particle_layout_type lt = particle_layout_type::RANDOM_NOT_EVEN);
+		uint32_t number = 6000,
+		particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_DISCARD);
     ~particles();
 
+    void set_particle_layout(particle_layout_type lt);
     void render();
     void update(float dt);
 
@@ -67,7 +107,6 @@ private:
     void init_particles();
     void setup_gl(std::shared_ptr<glprogram> active_program);
     void update_colors();
-    void update_colors_multi();
 };
 
 #endif // _PARTICLES_H_

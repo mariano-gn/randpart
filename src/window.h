@@ -47,6 +47,7 @@ private:
     std::shared_ptr<glprogram> m_program;
     std::shared_ptr<particles> m_particles;
     camera m_camera;
+    bool m_screen_change = false;
 
     // Camera hadling
     bool m_lmb_pressed = false, m_rmb_pressed = false;
@@ -61,6 +62,7 @@ private:
     static void cursor_position_callback(GLFWwindow* w_handle, double xpos, double ypos);
     static void mouse_button_callback(GLFWwindow* w_handle, int button, int action, int mods);
     static void scroll_callback(GLFWwindow* w_handle, double xoffset, double yoffset);
+    static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 };
 
 #endif // _WINDOW_H_

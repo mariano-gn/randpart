@@ -20,34 +20,27 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#ifndef _CAMERA_H_
-#define _CAMERA_H_
-#include <glm/matrix.hpp>
-#include <glm/vec2.hpp>
+#ifndef _SPP_H_
+#define _SPP_H_
 #include <glm/vec3.hpp>
+#include <unordered_map>
+#include <cstdint>
 
-class camera {
+// Space Partitioned Particles!
+class SPP {
 public:
-    camera(const glm::vec2& screen);
-    void screen_change(const glm::vec2& screen);
-    void home();
+    SPP(uint8_t interval_divisions, float max_val, float min_val);
+    ~SPP() = default;
 
-    void dolly(float dz);
-    void pan(const glm::vec2& dd);
-	void orbit(const glm::vec2& dd);
-
-    const glm::mat4x4& get_vp() const;
-
-    ~camera() = default;
+    void add(const glm::vec3& pos, size_t external_idx);
+    std::vector<size_t> get_neighbors(const glm::vec3& pos) const;
 private:
-    glm::vec3 m_pos, m_lookAt, m_up;
-    float m_pan_vel = .1f;
-    float m_dolly_vel = 3.f;
-    float m_orbit_vel = 4.f;
-    
-    glm::mat4x4 m_projection;
-    mutable glm::mat4x4 m_vp;
-    mutable bool m_dirty = true;
+    mutable std::unordered_map<size_t, std::vector<size_t>> m_buckets; // because operator[]
+    uint8_t m_interval_divisions;
+    float m_max_val, m_min_val;
+
+    size_t get_bucket(const glm::vec3& pos) const;
+    std::vector<size_t> get_buckets_area(size_t bucket_id) const;
 };
 
-#endif
+#endif // _SPP_H_

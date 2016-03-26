@@ -25,11 +25,11 @@ SOFTWARE.
 #include "glutils.h"
 #include <logger.h>
 #include <timer.h>
-#include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/norm.hpp>
 #include <glm/gtx/transform.hpp>
+#include <algorithm>
 #include <functional>
 #include <numeric>
 #include <random>
@@ -51,6 +51,18 @@ particles::~particles() {
     gl::DeleteBuffers(1, &m_vbo);
     gl::DeleteVertexArrays(1, &m_vao);
     CHECK_GL_ERRORS();
+}
+
+void particles::set_particle_layout(const particle_layout_type lt) {
+    if (lt != m_lt) {
+        m_lt = lt;
+        init_particles();
+
+        gl::BindVertexArray(m_vao);
+        gl::BufferData(gl::ARRAY_BUFFER, m_particles_render_data.size() * sizeof(particle_render_data), m_particles_render_data.data(), gl::DYNAMIC_DRAW);
+        gl::BindVertexArray(0);
+        CHECK_GL_ERRORS();
+    }
 }
 
 void particles::render() {
@@ -117,39 +129,41 @@ void particles::update(const float /*dt*/) {
 }
 
 void particles::init_particles() {
-	// Disabling random device for visual debug.
-	//std::random_device rd;
-	std::mt19937 gen(0/*rd()*/);
-	std::uniform_real_distribution<> dis_m11(-1., 1.);
-	static const auto rng_m11 = [&gen, &dis_m11]() {
-		return dis_m11(gen);
-	};
+    using namespace util::coords;
+    using namespace util::math;
+    std::mt19937 gen(std::random_device{}());
+	std::uniform_real_distribution<> dis_m11(-1., 1.), dis_01(0., 1.);
+
+	const auto rng_m11 = [&gen, &dis_m11]() -> float { return static_cast<float>(dis_m11(gen)); };
+    const auto rng_01 = [&gen, &dis_01]() -> float { return static_cast<float>(dis_01(gen)); };
 
 	for (auto ix = 0u; ix < m_particles_render_data.size(); ix++) {
-		glm::vec3 candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
+        glm::vec3 candidate;
 		switch (m_lt) {
-			case particle_layout_type::RANDOM_NOT_EVEN: {
-				// It's ok as is.
-			} break;
-			case particle_layout_type::RANDOM_DISCARD_UNWANTED: {
-				while (glm::length2(candidate) > 1.f) {
+			case particle_layout_type::RANDOM_CARTESIAN_DISCARD: {
+				do {
 					candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
-				}
+                } while (glm::length2(candidate) > 1.f);
 			} break;
-			case particle_layout_type::RANDOM_ANGLES:
-			default: {
-				SPL_FALSE_ASSERT("Sorry, it's not implemented yet.");
-			} break;
+			case particle_layout_type::RANDOM_SPHERICAL_NAIVE: {
+                candidate = get_unit_cartesian(glm::vec2{ rng_01() * twoPi, rng_01() * pi });
+            } break;
+            case particle_layout_type::RANDOM_SPHERICAL_LATITUDE : {
+                candidate = get_unit_cartesian(rng_01(), rng_01());
+            } break;
+            case particle_layout_type::RANDOM_CARTESIAN_NAIVE: {
+                candidate= glm::vec3(rng_m11(), rng_m11(), rng_m11());
+            } break;
 		}
 		m_particles_render_data[ix].pos = glm::normalize(candidate);
+        m_particles_data[ix].alive = true;
+        m_particles_data[ix].close_count = 0;
 	}
-    
-    //update_colors(); //11.1226s
-    update_colors_multi(); //6.43524s
+    update_colors();
 }
 
 void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
-    gl::PointSize(1);
+    gl::PointSize(2);
     gl::GenVertexArrays(1, &m_vao);
     gl::BindVertexArray(m_vao);
     gl::GenBuffers(1, &m_vbo);
@@ -180,46 +194,12 @@ void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
 }
 
 void particles::update_colors() {
-    size_t max_count = 0;
-    for (auto ix = 0u; ix < m_particles_data.size(); ix++) {
-        auto& left_rd = m_particles_render_data[ix];
-        auto& left_d = m_particles_data[ix];
-        if (left_d.alive) {
-            for (auto jx = ix+1; jx < m_particles_data.size(); jx++) {
-                if (m_particles_data[jx].alive) {
-                    auto& right_rd = m_particles_render_data[jx];
-                    if (glm::distance2(left_rd.pos, right_rd.pos) < 0.004) {
-                        left_d.close_count++;
-                        m_particles_data[jx].close_count++;
-                    }
-                }
-            }
-            if (left_d.close_count > max_count) {
-                max_count = left_d.close_count;
-            }
-        }
-    }
-    float max_countf = static_cast<float>(max_count);
-    
-    for (auto ix = 0u; ix < m_particles_render_data.size(); ix++) {
-        auto& d = m_particles_data[ix];
-        auto& rd = m_particles_render_data[ix];
-        if (d.alive) {
-            auto magic = d.close_count / max_countf;
-            rd.color = glm::vec3{ 1.0, magic, magic };
-        } else {
-            rd.color = glm::vec3{ .0, .0, .0 };
-        }
-    }
-}
-
-void particles::update_colors_multi() {
     unsigned max_threads = std::thread::hardware_concurrency();
-    const auto update_range_counts = [this](uint32_t range_begin, uint32_t range_end, std::unordered_map<uint32_t, uint32_t>& other_counts) {
+    const auto update_range_counts = [this](const uint32_t range_begin, const uint32_t range_end, std::unordered_map<uint32_t, uint32_t>& other_counts) {
         for (auto ix = range_begin; ix < range_end; ix++) {
-            auto& left_rd = m_particles_render_data[ix];
             auto& left_d = m_particles_data[ix];
             if (left_d.alive) {
+                auto& left_rd = m_particles_render_data[ix];
                 for (auto jx = ix+1; jx < m_particles_data.size(); jx++) {
                     if (m_particles_data[jx].alive) {
                         auto& right_rd = m_particles_render_data[jx];
@@ -232,16 +212,13 @@ void particles::update_colors_multi() {
             }
         }
     };
-    const auto update_range_colors = [this](uint32_t range_begin, uint32_t range_end, float max_countf) {
+    const auto update_range_colors = [this](const uint32_t range_begin, const uint32_t range_end, const float max_countf) {
         for (auto ix = range_begin; ix < range_end; ix++) {
             auto& d = m_particles_data[ix];
-            auto& rd = m_particles_render_data[ix];
-            if (d.alive) {
-                auto magic = d.close_count / max_countf;
-                rd.color = glm::vec3{ 1.0, magic, magic };
-            } else {
-                rd.color = glm::vec3{ .0, .0, .0 };
-            }
+            const auto number = d.close_count / max_countf;
+            m_particles_render_data[ix].color = (d.alive) ?
+                glm::vec3{ 1.f, number, number } :
+                glm::vec3{ 0.f, 0.f, 0.f };
         }
     };
     

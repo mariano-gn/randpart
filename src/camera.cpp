@@ -28,9 +28,15 @@ SOFTWARE.
 #include <glm/gtx/transform.hpp>
 #include <glm/common.hpp>
 
-camera::camera(const glm::vec2& screen) 
-    : m_projection(glm::perspective(glm::radians(45.f), screen.x / screen.y, .5f, 100.f)) {
+camera::camera(const glm::vec2& screen) {
+    screen_change(screen);
     home();
+}
+
+void camera::screen_change(const glm::vec2& screen) {
+    m_projection = glm::perspective(glm::radians(45.f), screen.x / screen.y, .5f, 100.f);
+    
+    m_dirty = true;
 }
 
 void camera::home() {
@@ -44,7 +50,7 @@ void camera::dolly(const float dz) {
     // TODO: Dolly based on hit point (not center, using mouse screenpos)
     const auto move = m_pos - m_lookAt;
     const auto curr_dist = glm::length(move);
-    const auto new_dist = glm::clamp(dz * m_dolly_vel + curr_dist, 1.f, 10.f);
+    const auto new_dist = glm::clamp(dz * m_dolly_vel + curr_dist, 1.f, 50.f);
 
     m_pos = m_lookAt + (glm::normalize(move) * new_dist);
     m_dirty = true;

@@ -35,6 +35,7 @@ set(RANDPART_SOURCES
 	"src/glprogram.cpp"
 	"src/main.cpp"
 	"src/particles.cpp"
+	"src/spp.cpp"
 	"src/window.cpp"
 )
 

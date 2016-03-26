@@ -20,34 +20,34 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#ifndef _CAMERA_H_
-#define _CAMERA_H_
-#include <glm/matrix.hpp>
-#include <glm/vec2.hpp>
-#include <glm/vec3.hpp>
+#include "spp.h"
+#include <algorithm>
 
-class camera {
-public:
-    camera(const glm::vec2& screen);
-    void screen_change(const glm::vec2& screen);
-    void home();
+SPP::SPP(const uint8_t interval_divisions, const float max_val, const float min_val)
+    : m_interval_divisions(interval_divisions)
+    , m_max_val(max_val)
+    , m_min_val(min_val) {
+}
 
-    void dolly(float dz);
-    void pan(const glm::vec2& dd);
-	void orbit(const glm::vec2& dd);
+void SPP::add(const glm::vec3& pos, size_t external_idx) {
+    m_buckets[get_bucket(pos)].push_back(external_idx);
+}
 
-    const glm::mat4x4& get_vp() const;
+std::vector<size_t> SPP::get_neighbors(const glm::vec3& pos) const {
+    auto buckets = get_buckets_area(get_bucket(pos));
+    std::vector<size_t> neighbors;
+    for (auto bix : buckets) {
+        auto& b = m_buckets[bix];
+        neighbors.insert(neighbors.end(), b.begin(), b.end());
+    }
+    std::sort(neighbors.begin(), neighbors.end());
+    return neighbors;
+}
 
-    ~camera() = default;
-private:
-    glm::vec3 m_pos, m_lookAt, m_up;
-    float m_pan_vel = .1f;
-    float m_dolly_vel = 3.f;
-    float m_orbit_vel = 4.f;
-    
-    glm::mat4x4 m_projection;
-    mutable glm::mat4x4 m_vp;
-    mutable bool m_dirty = true;
-};
+size_t SPP::get_bucket(const glm::vec3& /*pos*/) const {
+    return 0;
+}
 
-#endif
+std::vector<size_t> SPP::get_buckets_area(const size_t bucket_id) const {
+    return std::vector<size_t>{ bucket_id };
+}

@@ -74,14 +74,14 @@ struct particle_render_data {
 };
 
 struct particle_data {
-	bool alive = true;
+    bool alive = true;
     uint32_t close_count = 0;
 };
 
 enum class particle_layout_type : short {
-	RANDOM_CARTESIAN_NAIVE,
-	RANDOM_CARTESIAN_DISCARD,
-	RANDOM_SPHERICAL_NAIVE,
+    RANDOM_CARTESIAN_NAIVE,
+    RANDOM_CARTESIAN_DISCARD,
+    RANDOM_SPHERICAL_NAIVE,
     RANDOM_SPHERICAL_LATITUDE,
 };
 
@@ -89,9 +89,9 @@ class particles {
 public:
     // TODO: Changes in program?
     particles(
-		std::shared_ptr<glprogram> active_program, 
-		uint32_t number = 6000,
-		particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_DISCARD);
+        std::shared_ptr<glprogram> active_program, 
+        uint32_t number = 6000,
+        particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_DISCARD);
     ~particles();
 
     void set_particle_layout(particle_layout_type lt);
@@ -100,9 +100,9 @@ public:
 
 private:
     GLuint m_vao, m_vbo, m_ebo;
-	particle_layout_type m_lt;
+    particle_layout_type m_lt;
     std::vector<particle_render_data> m_particles_render_data;
-	std::vector<particle_data> m_particles_data;
+    std::vector<particle_data> m_particles_data;
 
     void init_particles();
     void setup_gl(std::shared_ptr<glprogram> active_program);

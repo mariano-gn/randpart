@@ -31,12 +31,12 @@ set(GLLOADGEN_SOURCES
 #Project files
 include_directories("./src")
 set(RANDPART_SOURCES
-	"src/camera.cpp"
-	"src/glprogram.cpp"
-	"src/main.cpp"
-	"src/particles.cpp"
-	"src/spp.cpp"
-	"src/window.cpp"
+    "src/camera.cpp"
+    "src/glprogram.cpp"
+    "src/main.cpp"
+    "src/particles.cpp"
+    "src/spp.cpp"
+    "src/window.cpp"
 )
 
 #Add up all sources

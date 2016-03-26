@@ -40,8 +40,8 @@ SOFTWARE.
 
 particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t number, const particle_layout_type lt)
     : m_lt(lt)
-	, m_particles_render_data(number)
-	, m_particles_data(number) {
+    , m_particles_render_data(number)
+    , m_particles_data(number) {
     init_particles();
     setup_gl(active_program);
 }
@@ -68,84 +68,84 @@ void particles::set_particle_layout(const particle_layout_type lt) {
 void particles::render() {
     gl::BindVertexArray(m_vao);
     CHECK_GL_ERRORS();
-	GLsizei count = m_particles_render_data.size();
+    GLsizei count = m_particles_render_data.size();
     gl::DrawElements(gl::POINTS, count, gl::UNSIGNED_INT, 0);
     CHECK_GL_ERRORS();
     gl::BindVertexArray(0);
-	CHECK_GL_ERRORS();
+    CHECK_GL_ERRORS();
 }
 
 void particles::update(const float /*dt*/) {
-//	// TODO: Move this to class.
-//	std::random_device rd;
-//	std::mt19937 gen(rd());
-//	std::uniform_real_distribution<> dis_m11(-1., 1.);
-//	std::uniform_real_distribution<> dis01(0., 1.);
-//	static const auto rng_m11 = [&gen, &dis_m11]() {
-//		return dis_m11(gen);
-//	};
-//	static const auto rng_dis01 = [&gen, &dis01]() {
-//		return dis01(gen);
-//	};
+//    // TODO: Move this to class.
+//    std::random_device rd;
+//    std::mt19937 gen(rd());
+//    std::uniform_real_distribution<> dis_m11(-1., 1.);
+//    std::uniform_real_distribution<> dis01(0., 1.);
+//    static const auto rng_m11 = [&gen, &dis_m11]() {
+//        return dis_m11(gen);
+//    };
+//    static const auto rng_dis01 = [&gen, &dis01]() {
+//        return dis01(gen);
+//    };
 //
 //    std::vector<size_t> updated;
 //    updated.reserve(m_particles_data.size() / 2);
-//	for (auto ix = 0u; ix < m_particles_data.size(); ix++) {
-//		if (m_particles_data[ix].alive) {
-//			m_particles_data[ix].alive = rng_dis01() < .9;
+//    for (auto ix = 0u; ix < m_particles_data.size(); ix++) {
+//        if (m_particles_data[ix].alive) {
+//            m_particles_data[ix].alive = rng_dis01() < .9;
 //            if (!m_particles_data[ix].alive) {
 //                updated.push_back(ix);
 //            }
-//		} else {
-//			if (rng_dis01() < .2) {
+//        } else {
+//            if (rng_dis01() < .2) {
 //                updated.push_back(ix);
-//				m_particles_data[ix].alive = true;
-//				// TODO: Move this too...
-//				glm::vec3 candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
-//				switch (m_lt) {
-//				case particle_layout_type::RANDOM_NOT_EVEN: {
-//					// It's ok as is.
-//				} break;
-//				case particle_layout_type::RANDOM_DISCARD_UNWANTED: {
-//					while (glm::length2(candidate) > 1.f) {
-//						candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
-//					}
-//				} break;
-//				case particle_layout_type::RANDOM_ANGLES:
-//				default: {
-//					SPL_FALSE_ASSERT("Sorry, it's not implemented yet.");
-//				} break;
-//				}
-//				m_particles_render_data[ix].pos = glm::normalize(candidate);
-//			}
-//		}
-//	}
+//                m_particles_data[ix].alive = true;
+//                // TODO: Move this too...
+//                glm::vec3 candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
+//                switch (m_lt) {
+//                case particle_layout_type::RANDOM_NOT_EVEN: {
+//                    // It's ok as is.
+//                } break;
+//                case particle_layout_type::RANDOM_DISCARD_UNWANTED: {
+//                    while (glm::length2(candidate) > 1.f) {
+//                        candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
+//                    }
+//                } break;
+//                case particle_layout_type::RANDOM_ANGLES:
+//                default: {
+//                    SPL_FALSE_ASSERT("Sorry, it's not implemented yet.");
+//                } break;
+//                }
+//                m_particles_render_data[ix].pos = glm::normalize(candidate);
+//            }
+//        }
+//    }
 //    
 //    update_colors(updated);
-//	gl::BindVertexArray(m_vao);
-//	gl::BufferData(gl::ARRAY_BUFFER, m_particles_render_data.size() * sizeof(particle_render_data), m_particles_render_data.data(), gl::DYNAMIC_DRAW);
-//	gl::BindVertexArray(0);
-//	CHECK_GL_ERRORS();
+//    gl::BindVertexArray(m_vao);
+//    gl::BufferData(gl::ARRAY_BUFFER, m_particles_render_data.size() * sizeof(particle_render_data), m_particles_render_data.data(), gl::DYNAMIC_DRAW);
+//    gl::BindVertexArray(0);
+//    CHECK_GL_ERRORS();
 }
 
 void particles::init_particles() {
     using namespace util::coords;
     using namespace util::math;
     std::mt19937 gen(std::random_device{}());
-	std::uniform_real_distribution<> dis_m11(-1., 1.), dis_01(0., 1.);
+    std::uniform_real_distribution<> dis_m11(-1., 1.), dis_01(0., 1.);
 
-	const auto rng_m11 = [&gen, &dis_m11]() -> float { return static_cast<float>(dis_m11(gen)); };
+    const auto rng_m11 = [&gen, &dis_m11]() -> float { return static_cast<float>(dis_m11(gen)); };
     const auto rng_01 = [&gen, &dis_01]() -> float { return static_cast<float>(dis_01(gen)); };
 
-	for (auto ix = 0u; ix < m_particles_render_data.size(); ix++) {
+    for (auto ix = 0u; ix < m_particles_render_data.size(); ix++) {
         glm::vec3 candidate;
-		switch (m_lt) {
-			case particle_layout_type::RANDOM_CARTESIAN_DISCARD: {
-				do {
-					candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
+        switch (m_lt) {
+            case particle_layout_type::RANDOM_CARTESIAN_DISCARD: {
+                do {
+                    candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
                 } while (glm::length2(candidate) > 1.f);
-			} break;
-			case particle_layout_type::RANDOM_SPHERICAL_NAIVE: {
+            } break;
+            case particle_layout_type::RANDOM_SPHERICAL_NAIVE: {
                 candidate = get_unit_cartesian(glm::vec2{ rng_01() * twoPi, rng_01() * pi });
             } break;
             case particle_layout_type::RANDOM_SPHERICAL_LATITUDE : {
@@ -154,11 +154,11 @@ void particles::init_particles() {
             case particle_layout_type::RANDOM_CARTESIAN_NAIVE: {
                 candidate= glm::vec3(rng_m11(), rng_m11(), rng_m11());
             } break;
-		}
-		m_particles_render_data[ix].pos = glm::normalize(candidate);
+        }
+        m_particles_render_data[ix].pos = glm::normalize(candidate);
         m_particles_data[ix].alive = true;
         m_particles_data[ix].close_count = 0;
-	}
+    }
     update_colors();
 }
 
@@ -184,8 +184,8 @@ void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
     gl::VertexAttribPointer(colAttrib, 3, gl::FLOAT, gl::FALSE_, sizeof(particle_render_data), (void*) sizeof(glm::vec3));
     CHECK_GL_ERRORS();
 
-	std::vector<GLuint> elements(m_particles_render_data.size());
-	std::iota(std::begin(elements), std::end(elements), 0);
+    std::vector<GLuint> elements(m_particles_render_data.size());
+    std::iota(std::begin(elements), std::end(elements), 0);
 
     gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, m_ebo);
     gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, elements.size() * sizeof(GLuint), elements.data(), gl::STATIC_DRAW);

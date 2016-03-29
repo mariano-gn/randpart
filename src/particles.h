@@ -22,13 +22,13 @@ SOFTWARE.
 
 #ifndef _PARTICLES_H_
 #define _PARTICLES_H_
-#include "spp.h"
 #include <gl_core_3_3_noext_pcpp.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <random>
 #include <vector>
 
 namespace util {
@@ -67,6 +67,7 @@ namespace util {
 }
 
 class glprogram;
+class spp;
 
 struct particle_render_data {
     glm::vec3 pos;
@@ -74,8 +75,13 @@ struct particle_render_data {
 };
 
 struct particle_data {
-    bool alive = true;
-    uint32_t close_count = 0;
+    constexpr static float k_total_life = 10.f * 1000.f;
+    float live_time = k_total_life;
+    uint16_t close_count = 0;
+
+    bool alive() {
+        return live_time > 0.f;
+    }
 };
 
 enum class particle_layout_type : short {
@@ -90,7 +96,7 @@ public:
     // TODO: Changes in program?
     particles(
         std::shared_ptr<glprogram> active_program, 
-        uint32_t number = 6000,
+        uint32_t number = 20000,
         particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_DISCARD);
     ~particles();
 
@@ -99,14 +105,19 @@ public:
     void update(float dt);
 
 private:
+    using dis_t = std::uniform_real_distribution<float>;
+    using gen_t = std::mt19937;
     GLuint m_vao, m_vbo, m_ebo;
     particle_layout_type m_lt;
     std::vector<particle_render_data> m_particles_render_data;
     std::vector<particle_data> m_particles_data;
+    std::shared_ptr<spp> m_optimizer;
 
     void init_particles();
+    void gen_particle_position(size_t index, const dis_t& distrib01, const dis_t& distribm11, gen_t& generator);
     void setup_gl(std::shared_ptr<glprogram> active_program);
     void update_colors();
+    void update_colors_optimizer(const std::vector<size_t>& updated_indices);
 };
 
 #endif // _PARTICLES_H_

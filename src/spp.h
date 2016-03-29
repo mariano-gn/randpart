@@ -23,21 +23,24 @@ SOFTWARE.
 #ifndef _SPP_H_
 #define _SPP_H_
 #include <glm/vec3.hpp>
+#include <set>
 #include <unordered_map>
 #include <cstdint>
 
 // Space Partitioned Particles!
-class SPP {
+class spp {
 public:
-    SPP(uint8_t interval_divisions, float max_val, float min_val);
-    ~SPP() = default;
+    spp(uint8_t interval_divisions, float min_val, float max_val);
+    ~spp() = default;
 
     void add(const glm::vec3& pos, size_t external_idx);
+    void remove(const glm::vec3& pos, size_t external_idx);
     std::vector<size_t> get_neighbors(const glm::vec3& pos) const;
 private:
-    mutable std::unordered_map<size_t, std::vector<size_t>> m_buckets; // because operator[]
+    std::unordered_map<size_t, std::set<size_t>> m_buckets;
     uint8_t m_interval_divisions;
-    float m_max_val, m_min_val;
+    glm::vec3 m_min_vec;
+    float m_normalize_value;
 
     size_t get_bucket(const glm::vec3& pos) const;
     std::vector<size_t> get_buckets_area(size_t bucket_id) const;

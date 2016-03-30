@@ -26,6 +26,7 @@ SOFTWARE.
 #include <set>
 #include <unordered_map>
 #include <cstdint>
+#include <vector>
 
 // Space Partitioned Particles!
 class spp {

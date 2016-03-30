@@ -114,7 +114,7 @@ private:
     std::shared_ptr<spp> m_optimizer;
 
     void init_particles();
-    void gen_particle_position(size_t index, const dis_t& distrib01, const dis_t& distribm11, gen_t& generator);
+    void gen_particle_position(size_t index, dis_t& distrib01, dis_t& distribm11, gen_t& generator);
     void setup_gl(std::shared_ptr<glprogram> active_program);
     void update_colors();
     void update_colors_optimizer(const std::vector<size_t>& updated_indices);

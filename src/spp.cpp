@@ -23,6 +23,7 @@ SOFTWARE.
 #include "spp.h"
 #include <simple-assert.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 spp::spp(const uint8_t interval_divisions, const float min_val, const float max_val)
@@ -33,15 +34,25 @@ spp::spp(const uint8_t interval_divisions, const float min_val, const float max_
     SPL_ASSERT(max_val > min_val, "Consider swapping min and max! :)");
 }
 
-void spp::add(const glm::vec3& pos, size_t external_idx) {
-    m_buckets[get_bucket(pos)].insert(external_idx);
+uint32_t spp::add(const glm::vec3& pos, const size_t external_idx) {
+    const auto bid = get_bucket(pos);
+    m_buckets[bid].push_back(external_idx);
+    return bid;
 }
-void spp::remove(const glm::vec3& pos, size_t external_idx) {
-    m_buckets[get_bucket(pos)].erase(external_idx);
+void spp::remove(const glm::vec3& pos, const size_t external_idx) {
+    remove(get_bucket(pos), external_idx);
+}
+void spp::remove(const uint32_t bucket_id, const size_t external_idx) {
+    auto& b = m_buckets[bucket_id];
+    b.erase(std::find(b.begin(), b.end(), external_idx));
 }
 
 std::vector<size_t> spp::get_neighbors(const glm::vec3& pos) const {
-    auto buckets = get_buckets_area(get_bucket(pos));
+    return get_neighbors(get_bucket(pos));
+}
+
+std::vector<size_t> spp::get_neighbors(const uint32_t bucket_id) const {
+    const auto buckets = get_buckets_area(bucket_id);
     std::vector<size_t> neighbors;
     for (auto bix : buckets) {
         auto b = m_buckets.find(bix);
@@ -52,38 +63,39 @@ std::vector<size_t> spp::get_neighbors(const glm::vec3& pos) const {
     return neighbors;
 }
 
-static size_t pack(const size_t x, const size_t y, const size_t z) {
+static uint32_t pack(const uint8_t x, const uint8_t y, const uint8_t z) {
     return  x << 16 | y << 8 | z;
 }
-static glm::ivec3 unpack(size_t value) {
-    return {
+static std::array<uint8_t, 3> unpack(uint32_t value) {
+    return{
         (value >> 16) & 0xFF,
         (value >> 8) & 0xFF,
         value & 0xFF
     };
 }
-size_t spp::get_bucket(const glm::vec3& pos) const {
+uint32_t spp::get_bucket(const glm::vec3& pos) const {
     SPL_ASSERT(pos.x <= m_min_vec.x + m_normalize_value && pos.x >= m_min_vec.x, "pos.x is not within SPP bounds.");
     SPL_ASSERT(pos.y <= m_min_vec.y + m_normalize_value && pos.y >= m_min_vec.y, "pos.y is not within SPP bounds.");
     SPL_ASSERT(pos.z <= m_min_vec.z + m_normalize_value && pos.z >= m_min_vec.z, "pos.z is not within SPP bounds.");
     const auto norm = (pos - m_min_vec) / m_normalize_value;
     return pack(
-        static_cast<size_t>(std::round(m_interval_divisions * norm.x)),
-        static_cast<size_t>(std::round(m_interval_divisions * norm.y)),
-        static_cast<size_t>(std::round(m_interval_divisions * norm.z)));
+        static_cast<uint8_t>(std::round(m_interval_divisions * norm.x)),
+        static_cast<uint8_t>(std::round(m_interval_divisions * norm.y)),
+        static_cast<uint8_t>(std::round(m_interval_divisions * norm.z)));
 }
 
-std::vector<size_t> spp::get_buckets_area(const size_t bucket_id) const {
-    std::vector<size_t> buckets;
+std::vector<uint32_t> spp::get_buckets_area(const uint32_t bucket_id) const {
+    std::vector<uint32_t> buckets;
+    buckets.reserve(3 * 3 * 3); // Max adjacent buckets (think of a rubik's cube)
     const auto unpacked = unpack(bucket_id);
     for (int8_t ix = -1; ix < 2; ix++) {
-        const auto xval = unpacked.x + ix;
+        const int8_t xval = unpacked[0] + ix;
         if (xval >= 0 && xval <= m_interval_divisions) {
             for (int8_t iy = -1; iy < 2; iy++) {
-                const auto yval = unpacked.y + iy;
+                const int8_t yval = unpacked[1] + iy;
                 if (yval >= 0 && yval <= m_interval_divisions) {
                     for (int8_t iz = -1; iz < 2; iz++) {
-                        const auto zval = unpacked.z + iz;
+                        const int8_t zval = unpacked[2] + iz;
                         if (zval >= 0 && zval <= m_interval_divisions) {
                             buckets.push_back(pack(xval, yval, zval));
                         }

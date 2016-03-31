@@ -34,17 +34,19 @@ public:
     spp(uint8_t interval_divisions, float min_val, float max_val);
     ~spp() = default;
 
-    void add(const glm::vec3& pos, size_t external_idx);
+    uint32_t add(const glm::vec3& pos, size_t external_idx);
     void remove(const glm::vec3& pos, size_t external_idx);
+    void remove(uint32_t bucket_id, size_t external_idx);
     std::vector<size_t> get_neighbors(const glm::vec3& pos) const;
+    std::vector<size_t> get_neighbors(uint32_t bucket_id) const;
 private:
-    std::unordered_map<size_t, std::set<size_t>> m_buckets;
+    std::unordered_map<uint32_t, std::vector<size_t>> m_buckets;
     uint8_t m_interval_divisions;
     glm::vec3 m_min_vec;
     float m_normalize_value;
 
-    size_t get_bucket(const glm::vec3& pos) const;
-    std::vector<size_t> get_buckets_area(size_t bucket_id) const;
+    uint32_t get_bucket(const glm::vec3& pos) const;
+    std::vector<uint32_t> get_buckets_area(uint32_t bucket_id) const;
 };
 
 #endif // _SPP_H_

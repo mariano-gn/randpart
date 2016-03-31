@@ -41,10 +41,12 @@ SOFTWARE.
 //static const char* const kTag = "particles";
 
 particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t number, const particle_layout_type lt)
-    : m_lt(lt)
+    : m_dis01(0.f, 1.f)
+    , m_dism11(-1.f, 1.f)
+    , m_lt(lt)
     , m_particles_render_data(number)
     , m_particles_data(number) {
-    init_particles();
+    m_optimizer.reset(new spp{ 0x21, -1.f, 1.f });
     setup_gl(active_program);
 }
 
@@ -70,63 +72,82 @@ void particles::set_particle_layout(const particle_layout_type lt) {
 void particles::render() {
     gl::BindVertexArray(m_vao);
     CHECK_GL_ERRORS();
-    GLsizei count = m_particles_render_data.size();
+    const GLsizei count = m_particles_render_data.size();
     gl::DrawElements(gl::POINTS, count, gl::UNSIGNED_INT, 0);
     CHECK_GL_ERRORS();
     gl::BindVertexArray(0);
     CHECK_GL_ERRORS();
 }
 
-void particles::update(const float /*dt*/) {
-    //std::mt19937 gen(std::random_device{}());
-    //std::uniform_real_distribution<float> dis_m11(-1., 1.), dis_01(0., 1.);
-    //const auto rng_01 = [&gen, &dis_01]() -> float { return dis_01(gen); };
+void particles::update(const float dt) {
+#ifdef _DEBUG
+    static uint32_t counter = 0;
+    static util::Timer<> t;
+    if (++counter == 60) {
+        const float total_time = t.get_total<float>() / 1000.f; // in seconds
+        const auto fps = static_cast<uint16_t>(counter / total_time);
+        LOG("fps: ", fps);
+        counter = 0;
+        t.reset();
+    }
+#endif
+    if (m_update_particles) {
+        std::set<size_t> updated;
+        for (auto ix = 0u; ix < m_particles_data.size(); ix++) {
+            auto& d = m_particles_data[ix];
+            if (d.alive()) {
+                d.live_time -= dt;
+                if (!d.alive()) {
+                    // Just died.
+                    m_optimizer->remove(m_particles_data[ix].bucket, ix);
+                    m_particles_data[ix].close_count = 0;
+                    updated.insert(ix);
+                }
+            } else if (m_dis01(m_generator) < .9) {
+                // Just born.
+                updated.insert(ix);
+                gen_particle_position(ix);
+                m_particles_data[ix].live_time = particle_data::k_total_life * m_dis01(m_generator);
+                m_particles_data[ix].close_count = 0;
+                m_particles_data[ix].bucket = m_optimizer->add(m_particles_render_data[ix].pos, ix);
+            }
+        }
 
-    //std::set<size_t> updated;
-    //for (auto ix = 0u; ix < m_particles_data.size(); ix++) {
-    //    auto& d = m_particles_data[ix];
-    //    if (d.alive()) {
-    //        d.live_time -= dt;
-    //        if (!d.alive()) {
-    //            // Just died.
-    //            m_optimizer->remove(m_particles_render_data[ix].pos, ix);
-    //            m_particles_data[ix].close_count = 0;
-    //            updated.insert(ix);
-    //        }
-    //    } else if (rng_01() < .9) {
-    //        // Just born.
-    //        updated.insert(ix);
-    //        m_particles_data[ix].live_time = particle_data::k_total_life;
-    //        m_particles_data[ix].close_count = 0;
-    //        gen_particle_position(ix, dis_01, dis_m11, gen);
-    //        m_optimizer->add(m_particles_render_data[ix].pos, ix);
-    //    }
-    //}
+        std::set<size_t> all_updated;
+        for (auto ix : updated) {
+            all_updated.insert(ix);
+            auto& pd_ix = m_particles_data[ix];
+            pd_ix.neighbors = m_optimizer->get_neighbors(pd_ix.bucket);
 
-    //std::set<size_t> all_updated;
-    //for (auto ix : updated) {
-    //    // Particle changed, update neighbors too.
-    //    auto neighbors = m_optimizer->get_neighbors(m_particles_render_data[ix].pos);
-    //    all_updated.insert(neighbors.begin(), neighbors.end());
-    //    all_updated.insert(ix);
-    //}
+            for (auto& n : pd_ix.neighbors) {
+                if (all_updated.find(n) != all_updated.end()) { continue; }
+                auto& pd_n = m_particles_data[n];
+                if (pd_n.alive()) {
+                    pd_n.neighbors = m_optimizer->get_neighbors(pd_n.bucket);
+                    all_updated.insert(n);
+                }
+            }
 
-    //update_colors_optimizer(std::vector<size_t>{ all_updated.begin(), all_updated.end() });
-    //gl::BindVertexArray(m_vao);
-    //gl::BufferData(gl::ARRAY_BUFFER, m_particles_render_data.size() * sizeof(particle_render_data), m_particles_render_data.data(), gl::DYNAMIC_DRAW);
-    //gl::BindVertexArray(0);
-    //CHECK_GL_ERRORS();
+            if (!pd_ix.alive()) {
+                m_particles_data[ix].neighbors = {};
+            }
+        }
+
+        update_colors_optimizer(std::vector<size_t>{ all_updated.begin(), all_updated.end() });
+        gl::BindVertexArray(m_vao);
+        gl::BufferData(gl::ARRAY_BUFFER, m_particles_render_data.size() * sizeof(particle_render_data), m_particles_render_data.data(), gl::DYNAMIC_DRAW);
+        gl::BindVertexArray(0);
+        CHECK_GL_ERRORS();
+    }
 }
 
 void particles::init_particles() {
     m_optimizer.reset(new spp{ 0x21, -1.f, 1.f });
 
-    std::mt19937 gen(std::random_device{}());
-    std::uniform_real_distribution<float> dis_m11(-1.f, 1.f), dis_01(0.f, 1.f);
     for (auto ix = 0u; ix < m_particles_render_data.size(); ix++) {
-        gen_particle_position(ix, dis_01, dis_m11, gen);
-        m_optimizer->add(m_particles_render_data[ix].pos, ix);
-        m_particles_data[ix].live_time = particle_data::k_total_life;
+        gen_particle_position(ix);
+        m_particles_data[ix].bucket = m_optimizer->add(m_particles_render_data[ix].pos, ix);
+        m_particles_data[ix].live_time = particle_data::k_total_life * m_dis01(m_generator);
         m_particles_data[ix].close_count = 0;
     }
     std::vector<size_t> all(m_particles_data.size());
@@ -134,26 +155,24 @@ void particles::init_particles() {
     update_colors_optimizer(all);
 }
 
-void particles::gen_particle_position(size_t index, dis_t& distrib01, dis_t& distribm11, gen_t& generator) {
+void particles::gen_particle_position(const size_t index) {
     using namespace util::coords;
     using namespace util::math;
-    const auto rng_m11 = [&generator, &distribm11]() -> float { return distribm11(generator); };
-    const auto rng_01 = [&generator, &distrib01]() -> float { return distrib01(generator); };
     glm::vec3 candidate;
     switch (m_lt) {
         case particle_layout_type::RANDOM_CARTESIAN_DISCARD: {
             do {
-                candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
+                candidate = glm::vec3(m_dism11(m_generator), m_dism11(m_generator), m_dism11(m_generator));
             } while (glm::length2(candidate) > 1.f);
         } break;
         case particle_layout_type::RANDOM_SPHERICAL_NAIVE: {
-            candidate = get_unit_cartesian(glm::vec2{ rng_01() * twoPi, rng_01() * pi });
+            candidate = get_unit_cartesian(glm::vec2{ m_dis01(m_generator) * twoPi, m_dis01(m_generator) * pi });
         } break;
         case particle_layout_type::RANDOM_SPHERICAL_LATITUDE: {
-            candidate = get_unit_cartesian(rng_01(), rng_01());
+            candidate = get_unit_cartesian(m_dis01(m_generator), m_dis01(m_generator));
         } break;
         case particle_layout_type::RANDOM_CARTESIAN_NAIVE: {
-            candidate = glm::vec3(rng_m11(), rng_m11(), rng_m11());
+            candidate = glm::vec3(m_dism11(m_generator), m_dism11(m_generator), m_dism11(m_generator));
         } break;
     }
     m_particles_render_data[index].pos = glm::normalize(candidate);
@@ -168,8 +187,6 @@ void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
     CHECK_GL_ERRORS();
 
     gl::BindBuffer(gl::ARRAY_BUFFER, m_vbo);
-    gl::BufferData(gl::ARRAY_BUFFER, m_particles_render_data.size() * sizeof(particle_render_data), m_particles_render_data.data(), gl::DYNAMIC_DRAW);
-    CHECK_GL_ERRORS();
 
     GLint posAttrib = active_program->get_attrib_location("Position");
     gl::EnableVertexAttribArray(posAttrib);
@@ -266,7 +283,7 @@ void particles::update_colors_optimizer(const std::vector<size_t>& updated_indic
             auto& left_d = m_particles_data[ix];
             if (left_d.alive()) {
                 auto& left_rd = m_particles_render_data[ix];
-                const auto others = m_optimizer->get_neighbors(left_rd.pos);
+                auto& others = left_d.neighbors;
                 for (auto jx : others) {
                     if (jx != ix && m_particles_data[jx].alive()) {
                         if (glm::distance2(left_rd.pos, m_particles_render_data[jx].pos) < 0.004) {
@@ -317,9 +334,4 @@ void particles::update_colors_optimizer(const std::vector<size_t>& updated_indic
     for (auto& worker : workers) {
         worker.join();
     }
-
-    //LOG("Close count logging");
-    //for (const auto& d : m_particles_data) {
-    //    LOG(d.close_count);
-    //}
 }

@@ -174,6 +174,8 @@ void window::key_callback(GLFWwindow* w_handle, int key, int /*scancode*/, int a
                 w.m_particles->set_particle_layout(particle_layout_type::RANDOM_SPHERICAL_NAIVE);
             } else if (key == GLFW_KEY_4) {
                 w.m_particles->set_particle_layout(particle_layout_type::RANDOM_SPHERICAL_LATITUDE);
+            } else if (key == GLFW_KEY_SPACE) {
+                w.m_particles->toggle_update_particles();
             }
         }
     }

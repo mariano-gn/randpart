@@ -76,8 +76,10 @@ struct particle_render_data {
 
 struct particle_data {
     constexpr static float k_total_life = 10.f * 1000.f;
-    float live_time = k_total_life;
+    float live_time = 0.f;
     uint16_t close_count = 0;
+    uint32_t bucket = 0xFFFFFFFF;
+    std::vector<size_t> neighbors;
 
     bool alive() {
         return live_time > 0.f;
@@ -104,17 +106,23 @@ public:
     void render();
     void update(float dt);
 
+    void toggle_update_particles() {
+        m_update_particles = !m_update_particles;
+    }
+
 private:
     using dis_t = std::uniform_real_distribution<float>;
-    using gen_t = std::mt19937;
+    std::mt19937 m_generator{ std::random_device{}() };
+    dis_t m_dism11, m_dis01;
     GLuint m_vao, m_vbo, m_ebo;
     particle_layout_type m_lt;
     std::vector<particle_render_data> m_particles_render_data;
     std::vector<particle_data> m_particles_data;
     std::shared_ptr<spp> m_optimizer;
+    bool m_update_particles = true;
 
     void init_particles();
-    void gen_particle_position(size_t index, dis_t& distrib01, dis_t& distribm11, gen_t& generator);
+    void gen_particle_position(size_t index);
     void setup_gl(std::shared_ptr<glprogram> active_program);
     void update_colors();
     void update_colors_optimizer(const std::vector<size_t>& updated_indices);

@@ -29,6 +29,7 @@ SOFTWARE.
 #include <cstdint>
 #include <memory>
 #include <random>
+#include <set>
 #include <vector>
 
 namespace util {
@@ -67,7 +68,6 @@ namespace util {
 }
 
 class glprogram;
-class spp;
 
 struct particle_render_data {
     glm::vec3 pos;
@@ -77,9 +77,8 @@ struct particle_render_data {
 struct particle_data {
     constexpr static float k_total_life = 10.f * 1000.f;
     float live_time = 0.f;
-    uint16_t close_count = 0;
-    uint32_t bucket = 0xFFFFFFFF;
-    std::vector<size_t> neighbors;
+    //std::vector<bool> neighbors; // This is very memory efficient but not thread friendly...
+    std::vector<uint8_t> neighbors; 
 
     bool alive() {
         return live_time > 0.f;
@@ -98,8 +97,8 @@ public:
     // TODO: Changes in program?
     particles(
         std::shared_ptr<glprogram> active_program, 
-        uint32_t number = 20000,
-        particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_DISCARD);
+        uint32_t number = 10000,
+        particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_NAIVE);
     ~particles();
 
     void set_particle_layout(particle_layout_type lt);
@@ -118,14 +117,12 @@ private:
     particle_layout_type m_lt;
     std::vector<particle_render_data> m_particles_render_data;
     std::vector<particle_data> m_particles_data;
-    std::shared_ptr<spp> m_optimizer;
     bool m_update_particles = true;
 
     void init_particles();
     void gen_particle_position(size_t index);
     void setup_gl(std::shared_ptr<glprogram> active_program);
-    void update_colors();
-    void update_colors_optimizer(const std::vector<size_t>& updated_indices);
+    void update_particles(const std::vector<size_t/*id*/>& updated);
 };
 
 #endif // _PARTICLES_H_

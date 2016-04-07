@@ -98,7 +98,7 @@ public:
     // TODO: Changes in program?
     particles(
         std::shared_ptr<glprogram> active_program, 
-        uint32_t number = 20000,
+        uint32_t number = 9000,
         particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_DISCARD);
     ~particles();
 

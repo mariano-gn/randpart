@@ -38,7 +38,9 @@ SOFTWARE.
 #include <thread>
 #include <unordered_map>
 
-//static const char* const kTag = "particles";
+static const auto k_max_coord_value = 1.f;
+static const auto k_min_coord_value = -1.f;
+static const uint8_t k_quad_subdivisions = 0x21;
 
 particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t number, const particle_layout_type lt)
     : m_dis01(0.f, 1.f)
@@ -46,7 +48,7 @@ particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t n
     , m_lt(lt)
     , m_particles_render_data(number)
     , m_particles_data(number) {
-    m_optimizer.reset(new spp{ 0x21, -1.f, 1.f });
+    m_optimizer.reset(new spp{ k_quad_subdivisions, k_min_coord_value, k_max_coord_value });
     setup_gl(active_program);
 }
 
@@ -91,12 +93,23 @@ void particles::update(const float dt) {
         t.reset();
     }
 #endif
+    static size_t updated_batch = 0;
+    static const size_t batch_size = 1000;
     if (m_update_particles) {
+        const size_t total_size = m_particles_data.size();
+        const size_t num_batches = (total_size / batch_size) + 1;
+
+        const size_t begin = batch_size * updated_batch;
+        const size_t end = std::min(begin + batch_size, total_size);
+        const float batch_dt = dt * (updated_batch + 1);
+        updated_batch = (updated_batch + 1) % num_batches;
+        LOG(begin, " ", end, " ", batch_dt);
+
         std::set<size_t> updated;
-        for (auto ix = 0u; ix < m_particles_data.size(); ix++) {
+        for (auto ix = begin; ix < end; ix++) {
             auto& d = m_particles_data[ix];
             if (d.alive()) {
-                d.live_time -= dt;
+                d.live_time -= batch_dt;
                 if (!d.alive()) {
                     // Just died.
                     m_optimizer->remove(m_particles_data[ix].bucket, ix);
@@ -142,7 +155,7 @@ void particles::update(const float dt) {
 }
 
 void particles::init_particles() {
-    m_optimizer.reset(new spp{ 0x21, -1.f, 1.f });
+    m_optimizer.reset(new spp{ k_quad_subdivisions, k_min_coord_value, k_max_coord_value });
 
     for (auto ix = 0u; ix < m_particles_render_data.size(); ix++) {
         gen_particle_position(ix);
@@ -276,7 +289,7 @@ void particles::update_colors() {
 }
 
 void particles::update_colors_optimizer(const std::vector<size_t>& updated_indices) {
-    unsigned max_threads = 2;// std::thread::hardware_concurrency();
+    unsigned max_threads = std::thread::hardware_concurrency();
     const auto update_range_counts = [this, updated_indices](const uint32_t range_begin, const uint32_t range_end) {
         for (auto uix = range_begin; uix < range_end; uix++) {
             const auto ix = updated_indices[uix];

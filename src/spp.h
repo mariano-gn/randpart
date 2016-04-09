@@ -28,7 +28,7 @@ SOFTWARE.
 #include <cstdint>
 #include <vector>
 
-// Space Partitioned Particles!
+// Space Partitioned Positions!
 class spp {
 public:
     spp(uint8_t interval_divisions, float min_val, float max_val);
@@ -37,8 +37,9 @@ public:
     uint32_t add(const glm::vec3& pos, size_t external_idx);
     void remove(const glm::vec3& pos, size_t external_idx);
     void remove(uint32_t bucket_id, size_t external_idx);
-    std::vector<size_t> get_neighbors(const glm::vec3& pos) const;
-    std::vector<size_t> get_neighbors(uint32_t bucket_id) const;
+    std::vector<uint32_t> get_buckets_area(const glm::vec3& pos) const;
+    std::vector<uint32_t> get_buckets_area(uint32_t bucket_id) const;
+    const std::vector<size_t>& get_bucket(uint32_t bucket_id) const;
 private:
     std::unordered_map<uint32_t, std::vector<size_t>> m_buckets;
     uint8_t m_interval_divisions;
@@ -46,7 +47,6 @@ private:
     float m_normalize_value;
 
     uint32_t get_bucket(const glm::vec3& pos) const;
-    std::vector<uint32_t> get_buckets_area(uint32_t bucket_id) const;
 };
 
 #endif // _SPP_H_

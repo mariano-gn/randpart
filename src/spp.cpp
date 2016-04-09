@@ -31,12 +31,13 @@ spp::spp(const uint8_t interval_divisions, const float min_val, const float max_
     , m_min_vec{ min_val, min_val, min_val }
     , m_normalize_value(max_val - min_val) {
     SPL_ASSERT(m_normalize_value != 0., "SPP interval can't be zero.");
-    SPL_ASSERT(max_val > min_val, "Consider swapping min and max! :)");
+    SPL_ASSERT(max_val > min_val, "Consider swapping min and max!");
 }
 
 uint32_t spp::add(const glm::vec3& pos, const size_t external_idx) {
     const auto bid = get_bucket(pos);
     m_buckets[bid].push_back(external_idx);
+    const auto size = m_buckets[bid].size();
     return bid;
 }
 void spp::remove(const glm::vec3& pos, const size_t external_idx) {
@@ -47,20 +48,8 @@ void spp::remove(const uint32_t bucket_id, const size_t external_idx) {
     b.erase(std::find(b.begin(), b.end(), external_idx));
 }
 
-std::vector<size_t> spp::get_neighbors(const glm::vec3& pos) const {
-    return get_neighbors(get_bucket(pos));
-}
-
-std::vector<size_t> spp::get_neighbors(const uint32_t bucket_id) const {
-    const auto buckets = get_buckets_area(bucket_id);
-    std::vector<size_t> neighbors;
-    for (auto bix : buckets) {
-        auto b = m_buckets.find(bix);
-        if (b != m_buckets.end()) {
-            neighbors.insert(neighbors.end(), b->second.begin(), b->second.end());
-        }
-    }
-    return neighbors;
+std::vector<uint32_t> spp::get_buckets_area(const glm::vec3& pos) const {
+    return get_buckets_area(get_bucket(pos));
 }
 
 static uint32_t pack(const uint8_t x, const uint8_t y, const uint8_t z) {
@@ -73,17 +62,6 @@ static std::array<uint8_t, 3> unpack(uint32_t value) {
         value & 0xFF
     };
 }
-uint32_t spp::get_bucket(const glm::vec3& pos) const {
-    SPL_ASSERT(pos.x <= m_min_vec.x + m_normalize_value && pos.x >= m_min_vec.x, "pos.x is not within SPP bounds.");
-    SPL_ASSERT(pos.y <= m_min_vec.y + m_normalize_value && pos.y >= m_min_vec.y, "pos.y is not within SPP bounds.");
-    SPL_ASSERT(pos.z <= m_min_vec.z + m_normalize_value && pos.z >= m_min_vec.z, "pos.z is not within SPP bounds.");
-    const auto norm = (pos - m_min_vec) / m_normalize_value;
-    return pack(
-        static_cast<uint8_t>(std::round(m_interval_divisions * norm.x)),
-        static_cast<uint8_t>(std::round(m_interval_divisions * norm.y)),
-        static_cast<uint8_t>(std::round(m_interval_divisions * norm.z)));
-}
-
 std::vector<uint32_t> spp::get_buckets_area(const uint32_t bucket_id) const {
     std::vector<uint32_t> buckets;
     buckets.reserve(3 * 3 * 3); // Max adjacent buckets (think of a rubik's cube)
@@ -97,7 +75,10 @@ std::vector<uint32_t> spp::get_buckets_area(const uint32_t bucket_id) const {
                     for (int8_t iz = -1; iz < 2; iz++) {
                         const int8_t zval = unpacked[2] + iz;
                         if (zval >= 0 && zval <= m_interval_divisions) {
-                            buckets.push_back(pack(xval, yval, zval));
+                            const auto potential_id = pack(xval, yval, zval);
+                            if (m_buckets.find(potential_id) != m_buckets.end()) {
+                                buckets.push_back(potential_id);
+                            }
                         }
                     }
                 }
@@ -105,4 +86,22 @@ std::vector<uint32_t> spp::get_buckets_area(const uint32_t bucket_id) const {
         }
     }
     return buckets;
+}
+
+const std::vector<size_t>& spp::get_bucket(const uint32_t bucket_id) const {
+    const auto& pair = m_buckets.find(bucket_id);
+    SPL_ASSERT(pair != m_buckets.end(), "The bucket was not found");
+
+    return pair->second;
+}
+
+uint32_t spp::get_bucket(const glm::vec3& pos) const {
+    SPL_ASSERT(pos.x <= m_min_vec.x + m_normalize_value && pos.x >= m_min_vec.x, "pos.x is not within SPP bounds.");
+    SPL_ASSERT(pos.y <= m_min_vec.y + m_normalize_value && pos.y >= m_min_vec.y, "pos.y is not within SPP bounds.");
+    SPL_ASSERT(pos.z <= m_min_vec.z + m_normalize_value && pos.z >= m_min_vec.z, "pos.z is not within SPP bounds.");
+    const auto norm = (pos - m_min_vec) / m_normalize_value;
+    return pack(
+        static_cast<uint8_t>(std::round(m_interval_divisions * norm.x)),
+        static_cast<uint8_t>(std::round(m_interval_divisions * norm.y)),
+        static_cast<uint8_t>(std::round(m_interval_divisions * norm.z)));
 }

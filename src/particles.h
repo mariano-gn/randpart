@@ -79,7 +79,7 @@ struct particle_data {
     float live_time = 0.f;
     uint16_t close_count = 0;
     uint32_t bucket = 0xFFFFFFFF;
-    std::vector<size_t> neighbors;
+    std::vector<uint32_t> affected_area;
 
     bool alive() {
         return live_time > 0.f;
@@ -98,8 +98,9 @@ public:
     // TODO: Changes in program?
     particles(
         std::shared_ptr<glprogram> active_program, 
-        uint32_t number = 9000,
-        particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_DISCARD);
+        uint32_t number = 50000,
+        particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_NAIVE,
+        bool stop_after_load = false);
     ~particles();
 
     void set_particle_layout(particle_layout_type lt);
@@ -120,6 +121,7 @@ private:
     std::vector<particle_data> m_particles_data;
     std::shared_ptr<spp> m_optimizer;
     bool m_update_particles = true;
+    bool m_stop_after_load;
 
     void init_particles();
     void gen_particle_position(size_t index);

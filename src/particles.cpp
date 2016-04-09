@@ -42,12 +42,13 @@ static const auto k_max_coord_value = 1.f;
 static const auto k_min_coord_value = -1.f;
 static const uint8_t k_quad_subdivisions = 0x21;
 
-particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t number, const particle_layout_type lt)
+particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t number, const particle_layout_type lt, const bool stop_after_load)
     : m_dis01(0.f, 1.f)
     , m_dism11(-1.f, 1.f)
     , m_lt(lt)
     , m_particles_render_data(number)
-    , m_particles_data(number) {
+    , m_particles_data(number)
+    , m_stop_after_load(stop_after_load) {
     m_optimizer.reset(new spp{ k_quad_subdivisions, k_min_coord_value, k_max_coord_value });
     setup_gl(active_program);
 }
@@ -103,7 +104,9 @@ void particles::update(const float dt) {
         const size_t end = std::min(begin + batch_size, total_size);
         const float batch_dt = dt * (updated_batch + 1);
         updated_batch = (updated_batch + 1) % num_batches;
-        LOG(begin, " ", end, " ", batch_dt);
+        if (m_stop_after_load && updated_batch == 0) {
+            m_update_particles = false;
+        }
 
         std::set<size_t> updated;
         for (auto ix = begin; ix < end; ix++) {
@@ -130,19 +133,22 @@ void particles::update(const float dt) {
         for (auto ix : updated) {
             all_updated.insert(ix);
             auto& pd_ix = m_particles_data[ix];
-            pd_ix.neighbors = m_optimizer->get_neighbors(pd_ix.bucket);
+            pd_ix.affected_area = m_optimizer->get_buckets_area(pd_ix.bucket);
 
-            for (auto& n : pd_ix.neighbors) {
-                if (all_updated.find(n) != all_updated.end()) { continue; }
-                auto& pd_n = m_particles_data[n];
-                if (pd_n.alive()) {
-                    pd_n.neighbors = m_optimizer->get_neighbors(pd_n.bucket);
-                    all_updated.insert(n);
+            for (auto bucket_id : pd_ix.affected_area) {
+                const auto& particles = m_optimizer->get_bucket(bucket_id);
+                for (auto n : particles) {
+                    if (all_updated.find(n) != all_updated.end()) { continue; }
+                    auto& pd_n = m_particles_data[n];
+                    if (pd_n.alive()) {
+                        pd_n.affected_area = m_optimizer->get_buckets_area(pd_n.bucket);
+                        all_updated.insert(n);
+                    }
                 }
             }
 
             if (!pd_ix.alive()) {
-                m_particles_data[ix].neighbors = {};
+                m_particles_data[ix].affected_area = {};
             }
         }
 
@@ -158,14 +164,13 @@ void particles::init_particles() {
     m_optimizer.reset(new spp{ k_quad_subdivisions, k_min_coord_value, k_max_coord_value });
 
     for (auto ix = 0u; ix < m_particles_render_data.size(); ix++) {
-        gen_particle_position(ix);
-        m_particles_data[ix].bucket = m_optimizer->add(m_particles_render_data[ix].pos, ix);
-        m_particles_data[ix].live_time = particle_data::k_total_life * m_dis01(m_generator);
+        m_particles_data[ix].live_time = 0;
         m_particles_data[ix].close_count = 0;
     }
     std::vector<size_t> all(m_particles_data.size());
     std::iota(all.begin(), all.end(), 0);
     update_colors_optimizer(all);
+    m_update_particles = true;
 }
 
 void particles::gen_particle_position(const size_t index) {
@@ -296,11 +301,14 @@ void particles::update_colors_optimizer(const std::vector<size_t>& updated_indic
             auto& left_d = m_particles_data[ix];
             if (left_d.alive()) {
                 auto& left_rd = m_particles_render_data[ix];
-                auto& others = left_d.neighbors;
-                for (auto jx : others) {
-                    if (jx != ix && m_particles_data[jx].alive()) {
-                        if (glm::distance2(left_rd.pos, m_particles_render_data[jx].pos) < 0.004) {
-                            left_d.close_count++;
+                auto& area = left_d.affected_area;
+                for (auto bucket_id : area) {
+                    const auto& others = m_optimizer->get_bucket(bucket_id);
+                    for (auto jx : others) {
+                        if (jx != ix && m_particles_data[jx].alive()) {
+                            if (glm::distance2(left_rd.pos, m_particles_render_data[jx].pos) < 0.004) {
+                                left_d.close_count++;
+                            }
                         }
                     }
                 }

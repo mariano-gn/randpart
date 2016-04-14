@@ -71,19 +71,18 @@ class spp;
 
 struct particle_render_data {
     glm::vec3 pos;
-    glm::vec3 color;
+    uint32_t density = 0;
+    float time_to_death = 0.f;
+
+    bool alive() const {
+        return time_to_death > 0.f;
+    }
 };
 
 struct particle_data {
     constexpr static float k_total_life = 10.f * 1000.f;
-    float live_time = 0.f;
-    uint16_t close_count = 0;
     uint32_t bucket = 0xFFFFFFFF;
     std::vector<uint32_t> affected_area;
-
-    bool alive() {
-        return live_time > 0.f;
-    }
 };
 
 enum class particle_layout_type : short {
@@ -91,6 +90,7 @@ enum class particle_layout_type : short {
     RANDOM_CARTESIAN_DISCARD,
     RANDOM_SPHERICAL_NAIVE,
     RANDOM_SPHERICAL_LATITUDE,
+    RANDOM_CARTESIAN_CUBE
 };
 
 class particles {
@@ -98,13 +98,13 @@ public:
     // TODO: Changes in program?
     particles(
         std::shared_ptr<glprogram> active_program, 
-        uint32_t number = 50000,
-        particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_NAIVE,
+        uint32_t max_number = 20000,
+        particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_CUBE,
         bool stop_after_load = false);
     ~particles();
 
     void set_particle_layout(particle_layout_type lt);
-    void render();
+    void render(std::shared_ptr<glprogram> active_program);
     void update(float dt);
 
     void toggle_update_particles() {
@@ -122,11 +122,11 @@ private:
     std::shared_ptr<spp> m_optimizer;
     bool m_update_particles = true;
     bool m_stop_after_load;
+    uint32_t m_max_density = 1;
 
     void init_particles();
     void gen_particle_position(size_t index);
     void setup_gl(std::shared_ptr<glprogram> active_program);
-    void update_colors();
     void update_colors_optimizer(const std::vector<size_t>& updated_indices);
 };
 

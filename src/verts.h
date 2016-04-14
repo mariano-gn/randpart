@@ -35,6 +35,22 @@ namespace shaders {
             "    Color = vec4(inColor, 1.0);                \n"
             "    gl_Position = VP * vec4(Position, 1.0);    \n"
             "}                                              \n";
+
+        constexpr const char* particles =
+            "#version 330 core                                         \n"
+            "uniform mat4 VP;                                          \n"
+            "uniform float Inv_Max_Density;                            \n"
+            "in vec3 Position;                                         \n"
+            "in float Density;                                         \n"
+            "in float Time_To_Death;                                   \n"
+            "out vec4 Color;                                           \n"
+            "void main() {                                             \n"
+            "    float alive = float(Time_To_Death > 0.0);             \n"
+            "    float bg = Density * Inv_Max_Density * alive;         \n"
+            "    float ra = 1.0 * alive;                               \n"
+            "    Color = vec4(ra, bg, bg, ra);                         \n"
+            "    gl_Position = VP * vec4(Position, 1.0);               \n"
+            "}                                                         \n";
     }
 }
 

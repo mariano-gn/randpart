@@ -111,7 +111,7 @@ bool window::run() {
 
             gl::UniformMatrix4fv(m_program->get_uniform_location(kVP), 1, gl::FALSE_, glm::value_ptr(m_camera.get_vp()));
 
-            m_particles->render();
+            m_particles->render(m_program);
 
             /* Swap front and back buffers */
             glfwSwapBuffers(mp_impl);
@@ -130,9 +130,12 @@ void window::setup_gl() {
     gl::Enable(gl::CULL_FACE);
     gl::ClearColor(.0f, .0f, .0f, 1.0f);
 
+    gl::Enable(gl::BLEND);
+    gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+
     /*shaders*/
     m_program = glprogram::make_program({
-        { gl::VERTEX_SHADER, shaders::vertex::basic },
+        { gl::VERTEX_SHADER, shaders::vertex::particles },
         { gl::FRAGMENT_SHADER, shaders::fragment::basic }
     }, { "outColor" });
 }
@@ -174,6 +177,8 @@ void window::key_callback(GLFWwindow* w_handle, int key, int /*scancode*/, int a
                 w.m_particles->set_particle_layout(particle_layout_type::RANDOM_SPHERICAL_NAIVE);
             } else if (key == GLFW_KEY_4) {
                 w.m_particles->set_particle_layout(particle_layout_type::RANDOM_SPHERICAL_LATITUDE);
+            } else if (key == GLFW_KEY_5) {
+                w.m_particles->set_particle_layout(particle_layout_type::RANDOM_CARTESIAN_CUBE);
             } else if (key == GLFW_KEY_SPACE) {
                 w.m_particles->toggle_update_particles();
             }

@@ -41,13 +41,14 @@ SOFTWARE.
 static const auto k_max_coord_value = 1.f;
 static const auto k_min_coord_value = -1.f;
 static const uint8_t k_quad_subdivisions = 0x21;
+static const std::string k_md_loc = "Inv_Max_Density";
 
-particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t number, const particle_layout_type lt, const bool stop_after_load)
+particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t max_number, const particle_layout_type lt, const bool stop_after_load)
     : m_dis01(0.f, 1.f)
     , m_dism11(-1.f, 1.f)
     , m_lt(lt)
-    , m_particles_render_data(number)
-    , m_particles_data(number)
+    , m_particles_render_data(max_number)
+    , m_particles_data(max_number)
     , m_stop_after_load(stop_after_load) {
     m_optimizer.reset(new spp{ k_quad_subdivisions, k_min_coord_value, k_max_coord_value });
     setup_gl(active_program);
@@ -72,8 +73,9 @@ void particles::set_particle_layout(const particle_layout_type lt) {
     }
 }
 
-void particles::render() {
+void particles::render(std::shared_ptr<glprogram> active_program) {
     gl::BindVertexArray(m_vao);
+    gl::Uniform1f(active_program->get_uniform_location(k_md_loc), 1.f / std::max(1u, m_max_density));
     CHECK_GL_ERRORS();
     const GLsizei count = m_particles_render_data.size();
     gl::DrawElements(gl::POINTS, count, gl::UNSIGNED_INT, 0);
@@ -110,28 +112,31 @@ void particles::update(const float dt) {
 
         std::set<size_t> updated;
         for (auto ix = begin; ix < end; ix++) {
+            auto& rd = m_particles_render_data[ix];
             auto& d = m_particles_data[ix];
-            if (d.alive()) {
-                d.live_time -= batch_dt;
-                if (!d.alive()) {
+            if (rd.alive()) {
+                rd.time_to_death -= batch_dt;
+                if (!rd.alive()) {
                     // Just died.
-                    m_optimizer->remove(m_particles_data[ix].bucket, ix);
-                    m_particles_data[ix].close_count = 0;
+                    m_optimizer->remove(d.bucket, ix);
+                    rd.density = 0;
+                    rd.time_to_death = 0.f;
                     updated.insert(ix);
                 }
             } else if (m_dis01(m_generator) < .9) {
                 // Just born.
                 updated.insert(ix);
                 gen_particle_position(ix);
-                m_particles_data[ix].live_time = particle_data::k_total_life * m_dis01(m_generator);
-                m_particles_data[ix].close_count = 0;
-                m_particles_data[ix].bucket = m_optimizer->add(m_particles_render_data[ix].pos, ix);
+                rd.time_to_death = particle_data::k_total_life * m_dis01(m_generator);
+                rd.density = 0;
+                d.bucket = m_optimizer->add(m_particles_render_data[ix].pos, ix);
             }
         }
 
         std::set<size_t> all_updated;
         for (auto ix : updated) {
             all_updated.insert(ix);
+            auto& prd_ix = m_particles_render_data[ix];
             auto& pd_ix = m_particles_data[ix];
             pd_ix.affected_area = m_optimizer->get_buckets_area(pd_ix.bucket);
 
@@ -139,16 +144,17 @@ void particles::update(const float dt) {
                 const auto& particles = m_optimizer->get_bucket(bucket_id);
                 for (auto n : particles) {
                     if (all_updated.find(n) != all_updated.end()) { continue; }
+                    auto& prd_n = m_particles_render_data[n];
                     auto& pd_n = m_particles_data[n];
-                    if (pd_n.alive()) {
+                    if (prd_n.alive()) {
                         pd_n.affected_area = m_optimizer->get_buckets_area(pd_n.bucket);
                         all_updated.insert(n);
                     }
                 }
             }
 
-            if (!pd_ix.alive()) {
-                m_particles_data[ix].affected_area = {};
+            if (!prd_ix.alive()) {
+                pd_ix.affected_area = {};
             }
         }
 
@@ -163,9 +169,9 @@ void particles::update(const float dt) {
 void particles::init_particles() {
     m_optimizer.reset(new spp{ k_quad_subdivisions, k_min_coord_value, k_max_coord_value });
 
-    for (auto ix = 0u; ix < m_particles_render_data.size(); ix++) {
-        m_particles_data[ix].live_time = 0;
-        m_particles_data[ix].close_count = 0;
+    for (auto& rd : m_particles_render_data) {
+        rd.time_to_death = 0;
+        rd.density = 0;
     }
     std::vector<size_t> all(m_particles_data.size());
     std::iota(all.begin(), all.end(), 0);
@@ -189,11 +195,12 @@ void particles::gen_particle_position(const size_t index) {
         case particle_layout_type::RANDOM_SPHERICAL_LATITUDE: {
             candidate = get_unit_cartesian(m_dis01(m_generator), m_dis01(m_generator));
         } break;
+        case particle_layout_type::RANDOM_CARTESIAN_CUBE:
         case particle_layout_type::RANDOM_CARTESIAN_NAIVE: {
             candidate = glm::vec3(m_dism11(m_generator), m_dism11(m_generator), m_dism11(m_generator));
         } break;
     }
-    m_particles_render_data[index].pos = glm::normalize(candidate);
+    m_particles_render_data[index].pos = (m_lt != particle_layout_type::RANDOM_CARTESIAN_CUBE) ? glm::normalize(candidate) : candidate;
 }
 
 void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
@@ -206,14 +213,19 @@ void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
 
     gl::BindBuffer(gl::ARRAY_BUFFER, m_vbo);
 
-    GLint posAttrib = active_program->get_attrib_location("Position");
+    const GLint posAttrib = active_program->get_attrib_location("Position");
     gl::EnableVertexAttribArray(posAttrib);
     gl::VertexAttribPointer(posAttrib, 3, gl::FLOAT, gl::FALSE_, sizeof(particle_render_data), nullptr);
     CHECK_GL_ERRORS();
 
-    GLint colAttrib = active_program->get_attrib_location("inColor");
-    gl::EnableVertexAttribArray(colAttrib);
-    gl::VertexAttribPointer(colAttrib, 3, gl::FLOAT, gl::FALSE_, sizeof(particle_render_data), (void*) sizeof(glm::vec3));
+    const GLint densAttrib = active_program->get_attrib_location("Density");
+    gl::EnableVertexAttribArray(densAttrib);
+    gl::VertexAttribPointer(densAttrib, 1, gl::UNSIGNED_INT, gl::FALSE_, sizeof(particle_render_data), (void*) sizeof(glm::vec3));
+    CHECK_GL_ERRORS();
+
+    const GLint liveAttrib = active_program->get_attrib_location("Time_To_Death");
+    gl::EnableVertexAttribArray(liveAttrib);
+    gl::VertexAttribPointer(liveAttrib, 1, gl::FLOAT, gl::FALSE_, sizeof(particle_render_data), (void*) (sizeof(glm::vec3) + sizeof(uint32_t)));
     CHECK_GL_ERRORS();
 
     std::vector<GLuint> elements(m_particles_render_data.size());
@@ -225,89 +237,20 @@ void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
     CHECK_GL_ERRORS();
 }
 
-void particles::update_colors() {
-    unsigned max_threads = std::thread::hardware_concurrency();
-    const auto update_range_counts = [this](const uint32_t range_begin, const uint32_t range_end, std::unordered_map<uint32_t, uint16_t>& other_counts) {
-        for (auto ix = range_begin; ix < range_end; ix++) {
-            auto& left_d = m_particles_data[ix];
-            if (left_d.alive()) {
-                auto& left_rd = m_particles_render_data[ix];
-                for (auto jx = ix+1; jx < m_particles_data.size(); jx++) {
-                    if (m_particles_data[jx].alive()) {
-                        auto& right_rd = m_particles_render_data[jx];
-                        if (glm::distance2(left_rd.pos, right_rd.pos) < 0.004) {
-                            left_d.close_count++;
-                            other_counts[jx]++;
-                        }
-                    }
-                }
-            }
-        }
-    };
-    const auto update_range_colors = [this](const uint32_t range_begin, const uint32_t range_end, const float max_countf) {
-        for (auto ix = range_begin; ix < range_end; ix++) {
-            auto& d = m_particles_data[ix];
-            const auto number = d.close_count / max_countf;
-            m_particles_render_data[ix].color = d.alive() ?
-                glm::vec3{ 1.f, number, number } :
-                glm::vec3{ 0.f, 0.f, 0.f };
-        }
-    };
-    
-    std::vector<std::thread> workers;
-    std::vector<std::unordered_map<uint32_t, uint16_t>> extra(max_threads);
-    size_t bucket_size = m_particles_render_data.size() / max_threads;
-    for (auto ix = 0u; ix < max_threads; ix++) {
-        size_t rbegin = ix * bucket_size;
-        size_t rend = rbegin + bucket_size;
-        workers.push_back(std::thread(std::bind(update_range_counts, rbegin, rend, std::ref(extra[ix]))));
-    }
-    
-    for (auto& worker : workers) {
-        worker.join();
-    }
-    workers.clear();
-    
-    for (auto e : extra) {
-        for (auto pair : e) {
-            m_particles_data[pair.first].close_count += pair.second;
-        }
-    }
-    extra.clear();
-    
-    size_t max_count = 0;
-    for (auto& d : m_particles_data) {
-        if (d.alive() && d.close_count > max_count) {
-            max_count = d.close_count;
-        }
-    }
-    
-    for (auto ix = 0u; ix < max_threads; ix++) {
-        size_t rbegin = ix * bucket_size;
-        size_t rend = rbegin + bucket_size;
-        workers.push_back(std::thread(std::bind(update_range_colors, rbegin, rend, max_count * 1.f)));
-    }
-    
-    for (auto& worker : workers) {
-        worker.join();
-    }
-}
-
 void particles::update_colors_optimizer(const std::vector<size_t>& updated_indices) {
     unsigned max_threads = std::thread::hardware_concurrency();
     const auto update_range_counts = [this, updated_indices](const uint32_t range_begin, const uint32_t range_end) {
         for (auto uix = range_begin; uix < range_end; uix++) {
             const auto ix = updated_indices[uix];
-            auto& left_d = m_particles_data[ix];
-            if (left_d.alive()) {
-                auto& left_rd = m_particles_render_data[ix];
-                auto& area = left_d.affected_area;
+            auto& left_rd = m_particles_render_data[ix];
+            if (left_rd.alive()) {
+                auto& area = m_particles_data[ix].affected_area;
                 for (auto bucket_id : area) {
                     const auto& others = m_optimizer->get_bucket(bucket_id);
                     for (auto jx : others) {
-                        if (jx != ix && m_particles_data[jx].alive()) {
+                        if (jx != ix && m_particles_render_data[jx].alive()) {
                             if (glm::distance2(left_rd.pos, m_particles_render_data[jx].pos) < 0.004) {
-                                left_d.close_count++;
+                                left_rd.density++;
                             }
                         }
                     }
@@ -315,17 +258,8 @@ void particles::update_colors_optimizer(const std::vector<size_t>& updated_indic
             }
         }
     };
-    const auto update_range_colors = [this, updated_indices](const uint32_t range_begin, const uint32_t range_end, const float max_countf) {
-        for (auto uix = range_begin; uix < range_end; uix++) {
-            const auto ix = updated_indices[uix];
-            auto& d = m_particles_data[ix];
-            const auto number = d.close_count / max_countf;
-            m_particles_render_data[ix].color = d.alive() ?
-                glm::vec3{ 1.f, number, number } :
-                glm::vec3{ 0.f, 0.f, 0.f };
-        }
-    };
 
+    //TODO: Use a pool, we shouldn't be creating and killing threads each frame...
     std::vector<std::thread> workers;
     const size_t bucket_size = updated_indices.size() / max_threads;
     for (auto ix = 0u; ix < max_threads; ix++) {
@@ -337,22 +271,11 @@ void particles::update_colors_optimizer(const std::vector<size_t>& updated_indic
     for (auto& worker : workers) {
         worker.join();
     }
-    workers.clear();
 
-    size_t max_count = 0;
-    for (auto& d : m_particles_data) {
-        if (d.alive() && d.close_count > max_count) {
-            max_count = d.close_count;
+    m_max_density = 0;
+    for (auto& rd : m_particles_render_data) {
+        if (rd.alive() && rd.density > m_max_density) {
+            m_max_density = rd.density;
         }
-    }
-
-    for (auto ix = 0u; ix < max_threads; ix++) {
-        size_t rbegin = ix * bucket_size;
-        size_t rend = rbegin + bucket_size;
-        workers.push_back(std::thread(std::bind(update_range_colors, rbegin, rend, max_count * 1.f)));
-    }
-
-    for (auto& worker : workers) {
-        worker.join();
     }
 }

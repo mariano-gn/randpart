@@ -42,6 +42,7 @@ static const auto k_max_coord_value = 1.f;
 static const auto k_min_coord_value = -1.f;
 static const uint8_t k_quad_subdivisions = 0x21;
 static const std::string k_md_loc = "Inv_Max_Density";
+static const std::string k_dualc_loc = "Dual_Color_Demo";
 
 particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t max_number, const particle_layout_type lt, const bool stop_after_load)
     : m_dis01(0.f, 1.f)
@@ -75,7 +76,9 @@ void particles::set_particle_layout(const particle_layout_type lt) {
 
 void particles::render(std::shared_ptr<glprogram> active_program) {
     gl::BindVertexArray(m_vao);
+
     gl::Uniform1f(active_program->get_uniform_location(k_md_loc), 1.f / std::max(1u, m_max_density));
+    gl::Uniform1ui(active_program->get_uniform_location(k_dualc_loc), (m_lt == particle_layout_type::DEMO_DUAL_COLOR_SLICE));
     CHECK_GL_ERRORS();
     const GLsizei count = m_particles_render_data.size();
     gl::DrawElements(gl::POINTS, count, gl::UNSIGNED_INT, 0);
@@ -133,32 +136,35 @@ void particles::update(const float dt) {
             }
         }
 
-        std::set<size_t> all_updated;
-        for (auto ix : updated) {
-            all_updated.insert(ix);
-            auto& prd_ix = m_particles_render_data[ix];
-            auto& pd_ix = m_particles_data[ix];
-            pd_ix.affected_area = m_optimizer->get_buckets_area(pd_ix.bucket);
+        if (m_lt != particle_layout_type::DEMO_DUAL_COLOR_SLICE) {
+            std::set<size_t> all_updated;
+            for (auto ix : updated) {
+                all_updated.insert(ix);
+                auto& prd_ix = m_particles_render_data[ix];
+                auto& pd_ix = m_particles_data[ix];
+                pd_ix.affected_area = m_optimizer->get_buckets_area(pd_ix.bucket);
 
-            for (auto bucket_id : pd_ix.affected_area) {
-                const auto& particles = m_optimizer->get_bucket(bucket_id);
-                for (auto n : particles) {
-                    if (all_updated.find(n) != all_updated.end()) { continue; }
-                    auto& prd_n = m_particles_render_data[n];
-                    auto& pd_n = m_particles_data[n];
-                    if (prd_n.alive()) {
-                        pd_n.affected_area = m_optimizer->get_buckets_area(pd_n.bucket);
-                        all_updated.insert(n);
+                for (auto bucket_id : pd_ix.affected_area) {
+                    const auto& particles = m_optimizer->get_bucket(bucket_id);
+                    for (auto n : particles) {
+                        if (all_updated.find(n) != all_updated.end()) { continue; }
+                        auto& prd_n = m_particles_render_data[n];
+                        auto& pd_n = m_particles_data[n];
+                        if (prd_n.alive()) {
+                            pd_n.affected_area = m_optimizer->get_buckets_area(pd_n.bucket);
+                            all_updated.insert(n);
+                        }
                     }
+                }
+
+                if (!prd_ix.alive()) {
+                    pd_ix.affected_area = {};
                 }
             }
 
-            if (!prd_ix.alive()) {
-                pd_ix.affected_area = {};
-            }
+            update_colors_optimizer(std::vector<size_t>{ all_updated.begin(), all_updated.end() });
         }
 
-        update_colors_optimizer(std::vector<size_t>{ all_updated.begin(), all_updated.end() });
         gl::BindVertexArray(m_vao);
         gl::BufferData(gl::ARRAY_BUFFER, m_particles_render_data.size() * sizeof(particle_render_data), m_particles_render_data.data(), gl::DYNAMIC_DRAW);
         gl::BindVertexArray(0);
@@ -183,6 +189,7 @@ void particles::gen_particle_position(const size_t index) {
     using namespace util::coords;
     using namespace util::math;
     glm::vec3 candidate;
+    bool normalize = true;
     switch (m_lt) {
         case particle_layout_type::RANDOM_CARTESIAN_DISCARD: {
             do {
@@ -195,12 +202,18 @@ void particles::gen_particle_position(const size_t index) {
         case particle_layout_type::RANDOM_SPHERICAL_LATITUDE: {
             candidate = get_unit_cartesian(m_dis01(m_generator), m_dis01(m_generator));
         } break;
-        case particle_layout_type::RANDOM_CARTESIAN_CUBE:
+        case particle_layout_type::DEMO_DUAL_COLOR_SLICE : {
+            normalize = false;
+            candidate = glm::vec3(m_dism11(m_generator), m_dism11(m_generator), 0);
+        } break;
+        case particle_layout_type::RANDOM_CARTESIAN_CUBE: {
+            normalize = false;
+        } // Note no break.
         case particle_layout_type::RANDOM_CARTESIAN_NAIVE: {
             candidate = glm::vec3(m_dism11(m_generator), m_dism11(m_generator), m_dism11(m_generator));
         } break;
     }
-    m_particles_render_data[index].pos = (m_lt != particle_layout_type::RANDOM_CARTESIAN_CUBE) ? glm::normalize(candidate) : candidate;
+    m_particles_render_data[index].pos = (normalize) ? glm::normalize(candidate) : candidate;
 }
 
 void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
@@ -238,7 +251,7 @@ void particles::setup_gl(std::shared_ptr<glprogram> active_program) {
 }
 
 void particles::update_colors_optimizer(const std::vector<size_t>& updated_indices) {
-    unsigned max_threads = std::thread::hardware_concurrency();
+    static const auto max_threads = std::thread::hardware_concurrency() >  1u ? std::thread::hardware_concurrency() - 1u : 1u;
     const auto update_range_counts = [this, updated_indices](const uint32_t range_begin, const uint32_t range_end) {
         for (auto uix = range_begin; uix < range_end; uix++) {
             const auto ix = updated_indices[uix];

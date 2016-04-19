@@ -90,7 +90,8 @@ enum class particle_layout_type : short {
     RANDOM_CARTESIAN_DISCARD,
     RANDOM_SPHERICAL_NAIVE,
     RANDOM_SPHERICAL_LATITUDE,
-    RANDOM_CARTESIAN_CUBE
+    RANDOM_CARTESIAN_CUBE,
+    DEMO_DUAL_COLOR_SLICE
 };
 
 class particles {
@@ -112,9 +113,8 @@ public:
     }
 
 private:
-    using dis_t = std::uniform_real_distribution<float>;
     std::mt19937 m_generator{ std::random_device{}() };
-    dis_t m_dism11, m_dis01;
+    std::uniform_real_distribution<float> m_dism11, m_dis01;
     GLuint m_vao, m_vbo, m_ebo;
     particle_layout_type m_lt;
     std::vector<particle_render_data> m_particles_render_data;

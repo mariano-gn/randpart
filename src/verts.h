@@ -36,20 +36,32 @@ namespace shaders {
             "    gl_Position = VP * vec4(Position, 1.0);    \n"
             "}                                              \n";
 
+        // TODO: Use 2 shaders, Dual Color & Standard.
         constexpr const char* particles =
             "#version 330 core                                         \n"
             "uniform mat4 VP;                                          \n"
+            "uniform uint Dual_Color_Demo;                             \n"
             "uniform float Inv_Max_Density;                            \n"
             "in vec3 Position;                                         \n"
             "in float Density;                                         \n"
             "in float Time_To_Death;                                   \n"
             "out vec4 Color;                                           \n"
+            "                                                          \n"
+            "float len2(vec3 v) {                                      \n"
+            "    return v.x * v.x + v.y * v.y + v.z * v.z;             \n"
+            "}                                                         \n"
+            "                                                          \n"
             "void main() {                                             \n"
-            "    float alive = float(Time_To_Death > 0.0);             \n"
-            "    float bg = Density * Inv_Max_Density * alive;         \n"
-            "    float ra = 1.0 * alive;                               \n"
-            "    Color = vec4(ra, bg, bg, ra);                         \n"
             "    gl_Position = VP * vec4(Position, 1.0);               \n"
+            "    float alive = float(Time_To_Death > 0.0);             \n"
+            "    if (Dual_Color_Demo > 0u) {                           \n"
+            "        float w = float(len2(Position) <= 1.0);           \n"
+            "        float o = 1.0 - w;                                \n"
+            "        Color = vec4(w, 0, o, alive);                     \n"
+            "    } else {                                              \n"
+            "        float bg = Density * Inv_Max_Density * alive;     \n"
+            "        Color = vec4(alive, bg, bg, alive);               \n"
+            "    }                                                     \n"
             "}                                                         \n";
     }
 }

@@ -2,15 +2,15 @@
 <a id="top"></a>
 <br>
 Hello all!
-&nbsp;
-This time I want to begin a series of articles related to a little project I worked on last weeks. It's all inspired by a section on the book <a href="http://www.essentialmath.com/book.htm">Essential Mathematics for Games and Interactive Applications</a>, in which they talk about spherical and disc sampling.
-&nbsp;
-The general idea is that you want to generate initial directions for particles on a particle system, and what you do is obtain random points on the surface of the unit sphere (or circumferece of the unit disc, depending on how many dimensions you need). In the book they show 4 different methods and prove which of them are not right. I wanted to experiment with the random library from C++ and (initially) found interesting to present a visual demo of this 4 methods that were better than just a black and white picture.
-&nbsp;
+
+This time I want to begin a series of articles related to a little project I worked on this past weeks. It's all inspired by a section on the book <a href="http://www.essentialmath.com/book.htm">Essential Mathematics for Games and Interactive Applications</a>, in which they talk about spherical and disc sampling.
+
+The general idea is that you want to generate initial directions for particles on a particle system (or maybe photon positions/directions for a ray tracer), and what you do is obtain random points on the surface of the unit sphere (or circumferece of the unit disc, depending on how many dimensions you need). In the book they show 4 different methods and prove which of them are not right. I wanted to experiment with the random library from C++ and (initially) found interesting to present a visual demo of this 4 methods that were better than just a black and white picture.
+
 I came up with the idea of generating particles using this 4 methods and the apply color to them based on some density function, so to prove that having a more homogeneous surface in the sphere was a visual proof of the effectiveness of the method. In the same way, finding some type of pattern in the colors would be a proof of a problem.
-&nbsp;
+
 After having accomplished this initial objective I though of playing with the lifetime of the particles, and having some interaction, testing how many particles I could handle, ways of optimizing that number, and then time passed and I didn't write anything here to show :P
-&nbsp;
+
 Lets amend that now, but before we dive in, as I said, I wanted to use the random C++ library (from the STL) and I won't put doubts on the randomness of the numbers generated. Once assumed that, 2 of the four methods will have flaws that will make them generate an incorrect result. 
 <h1>Generating random points</h1>
 The book goes to show 4 different ways of achieving this, that I called <code>RANDOM_CARTESIAN_NAIVE</code>, <code>RANDOM_CARTESIAN_DISCARD</code>, <code>RANDOM_SPHERICAL_NAIVE</code> and <code>RANDOM_SPHERICAL_LATITUDE</code>. We'll go one by one with extracts of the demo.
@@ -26,7 +26,8 @@ std::mt19937 g_generator{ std::random_device{}() };
 std::uniform_real_distribution<float> g_dis01(0.f, 1.f);
 
 struct vec3 {
-    vec3(float ix, float iy, float iz) : x(ix), y(iy), z(iz) {}
+    vec3(float ix, float iy, float iz) 
+        : x(ix), y(iy), z(iz) {}
     float x, y, z;
     float len() {
         return std::sqrt(x*x + y*y + z*z);
@@ -60,23 +61,23 @@ vec3 get_random_cartesian_naive() {
 }
 [/code]
 Only by looking at the code, nothing seems wrong, but visualizing the result proves something isn't right:
-<INSERT RANDOM_CARTESIAN_NAIVE IMG></INSERT>
+<div style="text-align: center;">[embed width="400" height="376"]http://i.imgur.com/OH5GiqZ.gifv[/embed]</div>
 What's wrong?
-&nbsp;
+
 The problem is the normalization operation, to explain it, look at what's visualized when using the points without the call to normalize: 
-<INSERT RANDOM_CARTESIAN_CUBE IMG></INSERT>
+<div style="text-align: center;">[embed width="400" height="300"]http://i.imgur.com/6kCi6or.gifv[/embed]</div>
 Think of the normalization process as having 2 spheres, one in the middle inflating until its radius is 1 and one outside of the boundaries of the cube, deflating until its radius is also 1. The particles inbetween are moved within the vector formed between its original position and the center of the cube (either towards the center, moved by the outer sphere, or away from the center moved by the inner sphere).
-&nbsp;
+
 As we saw the unit cube density is approximately the same in the entire volume (units^3), if we take a slice, that slice will also have a uniform density, but in this case, in its surface (units^2). Lets also, color the slice particles based on the distance to the center, if it's within 1 unit, red, if it's more, blue:
-<INSERT DEMO_PARTICLES_SLICE IMG></INSERT>
+<img class="aligncenter size-medium" src="http://i.imgur.com/lIghsow.png" alt="demo_particle_slice" width="400" height="400" />
 Think now, tracing any line, from the center towards the outside, and think of the amount of particles you will hit tracing that line. The thing is, any line that crosses the red to blue boundary, will hit more particles that any line that reaches the border of the square only hitting red particles (diagonal vs. horizontal/vertical). 
-&nbsp;
+
 And here is the problem with this method, moving the subject to 2D, the amount of particles that will end together in any given point of the circumference of the circle, is equal to the amount of particles our line from the center (passing through that point) will hit. If our square has a density of 10000 particles per unit^2, it means it has around 100 particles per unit, if our line goes horizontal, from the center to the side, it will hit 100 particles (the square is 2 units lenght, so our radius is half of that)
-<INSERT DEMO_PARTICLES_SLICE - W-LINE IMG></INSERT>
-As you can see, that's not the case for our line being diagonal, since the covered lenght is a unit but <code>sqrt(2)</code> units, around 1.41. That means, our density in that point will not be 100 but ~141 particles.
+<img class="aligncenter size-medium" src="http://i.imgur.com/rHdpMpm.png" alt="demo_particle_slice_w-line" width="400" height="400" />
+As you can see, that's not the case for our line being diagonal, since the covered lenght isn't a unit but <code>sqrt(2)</code> units, around 1.41. That means, our density in that point will not be 100 but ~141 particles.
 <h2>RANDOM_CARTESIAN_DISCARD</h2>
-<INSERT RANDOM_CARTESIAN_DISCARD IMG></INSERT>
-This method builds upon the previous one but adds one more condition to candidate particle positions. They must have a lenght less than or equal to 1, essentially discarding any particle in the blue volume from the previous demo. This discard causes a re-execution of the random number generator for the same particle. This is more costly than the previous method, but ensures our final surface density will be uniform.
+<div style="text-align: center;">[embed width="400" height="400"]http://i.imgur.com/1fMuvkc.gifv[/embed]</div>
+This method builds upon the previous one but adds one more condition to candidate particle positions (rejecting invalid ones). They must have a lenght less than or equal to 1, essentially discarding any particle in the blue volume from the previous demo. This discard causes a re-execution of the random number generator for the same particle. This is more costly than the previous method, but ensures our final surface density will be uniform.
 The code, could be something like this:
 [code language="cpp"]
 vec3 get_random_cartesian_discard() {
@@ -95,27 +96,28 @@ vec3 get_random_cartesian_discard() {
 }
 [/code]
 Ok, what's the probability of having to re-gen the coordinates once (or, not being in the red volume)? That's equal to
-<code>1 - SphereVolume/CubeVolume</code>
-&nbsp; 
-<code>1 - {( 4 * pi * r^3 )  / 3 } / (2*r)^3</code>
-&nbsp;
-<code>1 - ( 4pi/3) / 8</code>
-&nbsp;
-<code>1 - pi / 6</code>
-&nbsp;
-<code>~0.48</code>
-And, twice? <code>~0.48 * ~0.48 ~ 0.2304</code>, three times? <code>~0.110592</code>. So, on average we'll have to generate 2 or 3 times as much particle positions as we want, or the cost for particle will be 2 or 3 times more than before.  
+<a href="https://www.codecogs.com/eqnedit.php?latex=\large&space;{\color{White}&space;1&space;-&space;\frac{SphereVolume}{CubeVolume}}" target="_blank"><img src="https://latex.codecogs.com/png.latex?\large&space;{\color{White}&space;1&space;-&space;\frac{SphereVolume}{CubeVolume}}" class="aligncenter" title="\large {\color{White} 1 - \frac{SphereVolume}{CubeVolume}}" /></a>
+
+<a href="https://www.codecogs.com/eqnedit.php?latex=\large&space;{\color{White}&space;1&space;-&space;\frac{\frac{4\pi&space;r^3}{3}}{(2r)^3}}" target="_blank"><img src="https://latex.codecogs.com/png.latex?\large&space;{\color{White}&space;1&space;-&space;\frac{\frac{4\pi&space;r^3}{3}}{(2r)^3}}" class="aligncenter" title="\large {\color{White} 1 - \frac{\frac{4\pi r^3}{3}}{(2r)^3}}" /></a>
+
+<a href="https://www.codecogs.com/eqnedit.php?latex=\large&space;{\color{White}&space;1&space;-&space;\frac{\frac{4\pi&space;}{3}}{8}}" target="_blank"><img src="https://latex.codecogs.com/png.latex?\large&space;{\color{White}&space;1&space;-&space;\frac{\frac{4\pi&space;}{3}}{8}}" class="aligncenter" title="\large {\color{White} 1 - \frac{\frac{4\pi }{3}}{8}}" /></a>
+
+<a href="https://www.codecogs.com/eqnedit.php?latex=\large&space;{\color{White}&space;1&space;-&space;\frac{\pi}{6}}" target="_blank"><img src="https://latex.codecogs.com/png.latex?\large&space;{\color{White}&space;1&space;-&space;\frac{\pi}{6}}" class="aligncenter" title="\large {\color{White} 1 - \frac{\pi}{6}}" /></a>
+
+<a href="https://www.codecogs.com/eqnedit.php?latex=\large&space;{\color{White}&space;\approx&space;0.48}" target="_blank"><img src="https://latex.codecogs.com/png.latex?\large&space;{\color{White}&space;\approx&space;0.48}" class="aligncenter" title="\large {\color{White} \approx 0.48}" /></a>
+
+And, twice? <code>~0.2304</code>, three times? <code>~0.110592</code>. So, on average we'll have to generate 2 or 3 times as much particle positions as we want, or the cost for particle will be 2 or 3 times more than before.  
 <h2>RANDOM_SPHERICAL_NAIVE</h2>
 Another different approach, is to think of the particle positions in terms of spherical coordinates. Naively, we could generate the two angles from random uniform distributions (one between zero and pi, the other between zero and 2*pi) assuming radius=1, convert the polar coordinates given by this 3 parameters into cartesian coordinates and call it a day. But, see:
-<INSERT RANDOM_SPHERICAL_NAIVE IMG></INSERT>
+<div style="text-align: center;">[embed width="400" height="300"]http://i.imgur.com/lSjvMMd.gifv[/embed]</div>
 For some reason, we have a higher concentration of particles on the poles, why is that?
 Because the distributions are 2, first on concentric rings (latitudes) in planes parallel to the xy plane, and then after that around the circumference of each ring.
 The first angle we randomly generate determinates in which plane each particle will be, generating for example 100 particles per plane. The second one, in which position of the circumference created by the intersection of that plane and the unit sphere the particle will be. As we go towards +z & -z (the poles) each circumference is smaller and smaller, making the same amount of particles to be spread out in a smaller line. What's the alternative?
 <h2>RANDOM_SPHERICAL_LATITUDE</h2>
-<INSERT RANDOM_SPHERICAL_LATITUDE IMG></INSERT>
+<div style="text-align: center;">[embed width="400" height="380"]http://i.imgur.com/NJNfWxr.gifv[/embed]</div>
 (Note: in both correct cases we don't see a completely uniform surface because of the way I generate the colors, the maximum density is always white, being that 1 or 100. Since the variance in the correct cases is so small we see a fairly mix of white and red, caused by minor random groupings)
-&nbsp;
-With this method, instead of taking the 2 random values directly as the 2 polar angles, we obtain a latitude longitude pair. we want the latitude and the longitude to be both uniformly distributed, and we also have to guarantee that <code>x^2 + y^2 + z^2 = 1</code> (all positions should be in the unit sphere surface).
+
+With this method, instead of taking the 2 random values directly as the 2 polar angles, we obtain a latitude longitude pair. We want the latitude and the longitude to be both uniformly distributed, and we also have to guarantee that <code>x^2 + y^2 + z^2 = 1</code> (all positions should be in the unit sphere surface).
 We calculate the z coordinate as our latitude and then based on it we calculate the radius at that latitude. Finally we generate our longitudinal angle in the range [zero, 2*pi].
 [code language="cpp"]
 vec3 get_random_spherical_latitude() {
@@ -129,18 +131,18 @@ vec3 get_random_spherical_latitude() {
 }
 [/code]
 A simple way to see how this works is based on the <a href="http://mathworld.wolfram.com/ArchimedesHat-BoxTheorem.html">Archimedes' Hat-Box Theorem</a>:
-<p>
+<blockquote>
     Enclose a sphere in a cylinder and cut out a spherical segment by slicing twice perpendicularly to the cylinder's axis. Then the lateral surface area of the spherical segment S_1 is equal to the lateral surface area cut out of the cylinder S_2 by the same slicing planes, i.e.,
 
-    S = S_1 = S_2 = 2piRh, 
+    <a href="https://www.codecogs.com/eqnedit.php?latex=\large&space;{\color{White}&space;S&space;=&space;S_1&space;=&space;S_2&space;=&space;2piRh,}" target="_blank"><img src="https://latex.codecogs.com/png.latex?\large&space;{\color{White}&space;S&space;=&space;S_1&space;=&space;S_2&space;=&space;2piRh,}" title="\large {\color{White} S = S_1 = S_2 = 2piRh,}" /></a>
     
     where R is the radius of the cylinder (and tangent sphere) and h is the height of the cylindrical (and spherical) segment.
-</p>
+</blockquote>
 Now, if we uniformly distribute the particles in the lateral surface of the cylinder segment, and then we pull each particle position towards the sphere surface (inverse projection, reducing the distance from the particle to the center maintaining direction); since the area is the same, the density will be the same.
-&nbsp;
+
 This is what this method does, z is distributed uniformly along the cylinder axis, theta is distributed uniformly along the cylinder circumference and finally x & y are calculated pulling the original position in the lateral surface of the circle towards the surface of the sphere multiplying by the calculated radius at the given Z value.
 
-Uf! Long article, lots of stuff and as always <a href="">code</a> :)
+Uf! Long article, lots of stuff and as always <a href="https://github.com/mariano-gn/randpart">code</a> :)
 I plan of doing more articles on the details of the demo, so stay tuned if you're interested!
 <br>
 <a href="#top">Back to Top</a>

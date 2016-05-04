@@ -1,0 +1,63 @@
+<a href="#es">Español</a>
+<a id="top"></a>
+<br>
+Hello!
+
+Another article in the particles series! The first one presented all the results, so now I want to talk about different parts of the final product. In this case I want to talk about the colorization, or how the particles end up being red, white, blue or some other mix of those.
+
+<h1>Red, White and Density</h1>
+Like I said in the first entry, I wanted to show the properties of each type of random position generation using a density visualization, in essense that means that the color is an indicator of how populated is the spaces around each particle: redder particles have less neighbors, white particles have more. The detail is "less" and "more" are defined relatively to the maximum value in the entire amount of particles. The value of density then is very simple (conceptually) to calculate but a little costly.
+
+<h2>Calculating Density</h2>
+The most basic version of the density calculation is as simple as:
+[code language="cpp"]
+void update_density(std::vector<Particle>& particles) {
+    for (auto& p1 in particles) {
+        for (auto& p2 in particles) {
+            if (p1.dist2(p2) < THRESHOLD_DIST) {
+                p1.density++;
+            }
+        }
+    }
+}
+[/code]
+
+The two most important things to notice here are, 
+<ul>
+    <li>There is a lot of wasted computing repeating operations.</li>
+    <li>This function order of execution is <code>O(N^2)</code> with N being the number of particles</li>
+</ul>
+
+The first approach to improving this 2 problems is very simple and involves avoid doing the same calculation twice. On each loop the same particle will take the place of A and then B so we'll eventually do <code>p1.dist2(p2)</code> & then <code>p2.dist2(p1)</code>. Let's avoid this:
+[code language="cpp"]
+void update_density(std::vector<Particle>& particles) {
+    for (auto ix = 0u; ix < particles.size(); ix++) {
+        for (auto jx = ix + 1; jx < particles.size(); jx++) {
+            if (p1.dist2(p2) < THRESHOLD_DIST) {
+                p1.density++;
+                p2.density++;
+            }
+    }
+}
+[/code]
+
+With this small change, we avoid doing lots of calculations twice, because each iteration updates the density of both particles (and we prevent from calculating again both values by only comparing each particles with the following ones).
+
+The order of execution did not changed that much though, we now do comparisons in this series:
+            1 -&gt; N-1 +
+            2 -&gt; N-2 +
+            3 -&gt; N-3 +
+            ...
+            N-1 -&gt; N-(N-1) = 1
+            Or: Sum(1, N){K} = {N(n+1)}/2
+The order still is quadratic (O({N(n+1)}/2)).
+
+We need a way to drastically simplify the amount of calculations we do.
+<h2>SPP or Space Partitioned Positions</h2>
+<br>
+<a href="#top">Back to Top</a>
+<hr>
+<a id="es"></a>
+<br>
+
+<a href="#es">Inicio</a>

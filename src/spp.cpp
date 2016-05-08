@@ -26,8 +26,8 @@ SOFTWARE.
 #include <array>
 #include <cmath>
 
-spp::spp(const uint8_t interval_divisions, const float min_val, const float max_val)
-    : m_interval_divisions(interval_divisions)
+spp::spp(const uint8_t intervals_per_axis, const float min_val, const float max_val)
+    : m_intervals_per_axis(intervals_per_axis)
     , m_min_vec{ min_val, min_val, min_val }
     , m_normalize_value(max_val - min_val) {
     SPL_ASSERT(m_normalize_value != 0., "SPP interval can't be zero.");
@@ -37,7 +37,6 @@ spp::spp(const uint8_t interval_divisions, const float min_val, const float max_
 uint32_t spp::add(const glm::vec3& pos, const size_t external_idx) {
     const auto bid = get_bucket(pos);
     m_buckets[bid].push_back(external_idx);
-    const auto size = m_buckets[bid].size();
     return bid;
 }
 void spp::remove(const glm::vec3& pos, const size_t external_idx) {
@@ -68,13 +67,13 @@ std::vector<uint32_t> spp::get_buckets_area(const uint32_t bucket_id) const {
     const auto unpacked = unpack(bucket_id);
     for (int8_t ix = -1; ix < 2; ix++) {
         const int8_t xval = unpacked[0] + ix;
-        if (xval >= 0 && xval <= m_interval_divisions) {
+        if (xval >= 0 && xval < m_intervals_per_axis) {
             for (int8_t iy = -1; iy < 2; iy++) {
                 const int8_t yval = unpacked[1] + iy;
-                if (yval >= 0 && yval <= m_interval_divisions) {
+                if (yval >= 0 && yval < m_intervals_per_axis) {
                     for (int8_t iz = -1; iz < 2; iz++) {
                         const int8_t zval = unpacked[2] + iz;
-                        if (zval >= 0 && zval <= m_interval_divisions) {
+                        if (zval >= 0 && zval < m_intervals_per_axis) {
                             const auto potential_id = pack(xval, yval, zval);
                             if (m_buckets.find(potential_id) != m_buckets.end()) {
                                 buckets.push_back(potential_id);
@@ -101,7 +100,7 @@ uint32_t spp::get_bucket(const glm::vec3& pos) const {
     SPL_ASSERT(pos.z <= m_min_vec.z + m_normalize_value && pos.z >= m_min_vec.z, "pos.z is not within SPP bounds.");
     const auto norm = (pos - m_min_vec) / m_normalize_value;
     return pack(
-        static_cast<uint8_t>(std::round(m_interval_divisions * norm.x)),
-        static_cast<uint8_t>(std::round(m_interval_divisions * norm.y)),
-        static_cast<uint8_t>(std::round(m_interval_divisions * norm.z)));
+        static_cast<uint8_t>(std::floor(m_intervals_per_axis * norm.x)),
+        static_cast<uint8_t>(std::floor(m_intervals_per_axis * norm.y)),
+        static_cast<uint8_t>(std::floor(m_intervals_per_axis * norm.z)));
 }

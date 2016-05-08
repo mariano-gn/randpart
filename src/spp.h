@@ -31,7 +31,7 @@ SOFTWARE.
 // Space Partitioned Positions!
 class spp {
 public:
-    spp(uint8_t interval_divisions, float min_val, float max_val);
+    spp(uint8_t intervals_per_axis, float min_val, float max_val);
     ~spp() = default;
 
     uint32_t add(const glm::vec3& pos, size_t external_idx);
@@ -42,7 +42,7 @@ public:
     const std::vector<size_t>& get_bucket(uint32_t bucket_id) const;
 private:
     std::unordered_map<uint32_t, std::vector<size_t>> m_buckets;
-    uint8_t m_interval_divisions;
+    uint8_t m_intervals_per_axis;
     glm::vec3 m_min_vec;
     float m_normalize_value;
 

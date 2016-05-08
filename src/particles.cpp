@@ -40,7 +40,8 @@ SOFTWARE.
 
 static const auto k_max_coord_value = 1.f;
 static const auto k_min_coord_value = -1.f;
-static const uint8_t k_quad_subdivisions = 0x21;
+static const auto k_particle_threshold2 = 0.004f;
+static const uint8_t k_interval_count = static_cast<uint8_t>(std::floor((k_max_coord_value - k_min_coord_value) / std::sqrt(k_particle_threshold2)));
 static const std::string k_md_loc = "Inv_Max_Density";
 static const std::string k_dualc_loc = "Dual_Color_Demo";
 
@@ -51,7 +52,7 @@ particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t m
     , m_particles_render_data(max_number)
     , m_particles_data(max_number)
     , m_stop_after_load(stop_after_load) {
-    m_optimizer.reset(new spp{ k_quad_subdivisions, k_min_coord_value, k_max_coord_value });
+    m_optimizer.reset(new spp{ k_interval_count, k_min_coord_value, k_max_coord_value });
     setup_gl(active_program);
 }
 
@@ -173,7 +174,7 @@ void particles::update(const float dt) {
 }
 
 void particles::init_particles() {
-    m_optimizer.reset(new spp{ k_quad_subdivisions, k_min_coord_value, k_max_coord_value });
+    m_optimizer.reset(new spp{ k_interval_count, k_min_coord_value, k_max_coord_value });
 
     for (auto& rd : m_particles_render_data) {
         rd.time_to_death = 0;
@@ -262,7 +263,7 @@ void particles::update_colors_optimizer(const std::vector<size_t>& updated_indic
                     const auto& others = m_optimizer->get_bucket(bucket_id);
                     for (auto jx : others) {
                         if (jx != ix && m_particles_render_data[jx].alive()) {
-                            if (glm::distance2(left_rd.pos, m_particles_render_data[jx].pos) < 0.004) {
+                            if (glm::distance2(left_rd.pos, m_particles_render_data[jx].pos) < k_particle_threshold2) {
                                 left_rd.density++;
                             }
                         }

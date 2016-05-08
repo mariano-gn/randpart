@@ -6,14 +6,14 @@ Hello!
 Another article in the particles series! The first one presented all the results, so now I want to talk about different parts of the final product. In this case I want to talk about the colorization, or how the particles end up being red, white, blue or some other mix of those.
 
 <h1>Red, White and Density</h1>
-Like I said in the first entry, I wanted to show the properties of each type of random position generation using a density visualization, in essense that means that the color is an indicator of how populated is the spaces around each particle: redder particles have less neighbors, white particles have more. The detail is "less" and "more" are defined relatively to the maximum value in the entire amount of particles. The value of density then is very simple (conceptually) to calculate but a little costly.
+Like I said in the first entry, I wanted to show the properties of each type of random position generation using a density visualization, in essence that means that the color is an indicator of how populated is the space around each particle: redder particles have less neighbors, white particles have more. The detail is "less" and "more" are defined relatively to the maximum value in the entire amount of particles. The value of density then is very simple (conceptually) to calculate but a little costly.
 
 <h2>Calculating Density</h2>
 The most basic version of the density calculation is as simple as:
 [code language="cpp"]
 void update_density(std::vector<Particle>& particles) {
-    for (auto& p1 in particles) {
-        for (auto& p2 in particles) {
+    for (auto& p1 : particles) {
+        for (auto& p2 : particles) {
             if (p1.dist2(p2) < THRESHOLD_DIST) {
                 p1.density++;
             }
@@ -27,12 +27,14 @@ The two most important things to notice here are,
     <li>There is a lot of wasted computing repeating operations.</li>
     <li>This function order of execution is <code>O(N^2)</code> with N being the number of particles</li>
 </ul>
-
+<h3>Don't repeat work</h3>
 The first approach to improving this 2 problems is very simple and involves avoid doing the same calculation twice. On each loop the same particle will take the place of A and then B so we'll eventually do <code>p1.dist2(p2)</code> & then <code>p2.dist2(p1)</code>. Let's avoid this:
 [code language="cpp"]
 void update_density(std::vector<Particle>& particles) {
     for (auto ix = 0u; ix < particles.size(); ix++) {
+        auto& p1 = particles[ix];
         for (auto jx = ix + 1; jx < particles.size(); jx++) {
+            auto& p2 = particles[jx];
             if (p1.dist2(p2) < THRESHOLD_DIST) {
                 p1.density++;
                 p2.density++;
@@ -44,17 +46,248 @@ void update_density(std::vector<Particle>& particles) {
 With this small change, we avoid doing lots of calculations twice, because each iteration updates the density of both particles (and we prevent from calculating again both values by only comparing each particles with the following ones).
 
 The order of execution did not changed that much though, we now do comparisons in this series:
-            1 -&gt; N-1 +
-            2 -&gt; N-2 +
-            3 -&gt; N-3 +
-            ...
-            N-1 -&gt; N-(N-1) = 1
-            Or: Sum(1, N){K} = {N(n+1)}/2
-The order still is quadratic (O({N(n+1)}/2)).
+<a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;Comparisons&space;=&space;N-1&plus;N-2&plus;N-3&plus;...&plus;N-(N-1)}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;Comparisons&space;=&space;N-1&plus;N-2&plus;N-3&plus;...&plus;N-(N-1)}" title="{\color{White} Comparisons = N-1+N-2+N-3+...+N-(N-1)}" /></a>
+<a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;Comparisons&space;=&space;\sum_{1}^{N-1}k=&space;\frac{(N-1)N}{2}}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;Comparisons&space;=&space;\sum_{1}^{N-1}k=&space;\frac{(N-1)N}{2}}" title="{\color{White} Comparisons = \sum_{1}^{N-1}k= \frac{(N-1)N}{2}}" /></a>
 
-We need a way to drastically simplify the amount of calculations we do.
-<h2>SPP or Space Partitioned Positions</h2>
-<br>
+The order still is quadratic. We need a way to drastically reduce the amount of calculations we do.
+<h3>Locality of the problem</h3>
+We're trying to visualize the particle density value at each particle which means we need a threshold value small enough to have some sense in the final visualization. Since we're plotting particles in the surface of the unit sphere and the unit sphere has a 1 unit radius, the maximum distance between 2 particles is 2 units (diameter). I picked <code>sqrt(0.004) ~ 0.063</code> (the tests are done with all distances squared so that we don't need to use the square root) as my threshold value, it could've been any number but this one resulted we from the beginning.
+
+If you compare both values you know that many, MANY particles are far away from each other, we can use a data structure suitable to just discard as many comparisons as possible before even doing them. Structures for this kind of range based distance calculations are within the family of the spatial tree structures like <a href="https://en.wikipedia.org/wiki/Quadtree">quadtrees</a>, <a href="https://en.wikipedia.org/wiki/Octree">octrees</a>, <a href="https://en.wikipedia.org/wiki/Binary_space_partitioning">BSP trees</a> and <a href="https://en.wikipedia.org/wiki/K-d_tree">kd-trees</a> to name a few.
+In fact, in ray tracing using the Photon Mapping technique, it's very common to use kd-trees as the Photon Map base for the quality of the distance range queries to retrieve photons closer to a given position in space.
+
+The only caveat it's that it might get costly to maintain a kd-tree if the points are dynamically created an removed (the tree will eventually have to be re balanced many times), since I wanted to eventually animate the particles, that was an inconvenience.
+
+What I ended up implementing is a hacky-dirty version of a fixed size leaf octree (anyone can argue that this code could be licensed under <a href="http://matt.might.net/articles/crapl/">CRAPL</a> instead of MIT, but hey, it worked fine and was easy ;P). Instead of dynamically creating a tree structure, I defined 2 parameters, a bounding box for the model (given by the maximum and minimum values any coordinate can take) and a number of intervals each axis will be subdivided to perform over each axis.
+
+The base structure is a hashmap of vectors (a set might've worked too, even better...) where each key is the indentifier generated based on a position and the value is a vector of all the elements that are within one leaf of this thing.
+
+Now, instead of comparing with alll the particles, a great portion of them is discarded with little trouble and only the best candidates are used in the comparison.
+
+<h3>SPP or "Space Partitioned Positions"</h3>
+This is the accelerator structure I've used:
+[code language="cpp"]
+class spp {
+public:
+    spp(uint8_t intervals_per_axis, float min_val, float max_val);
+    ~spp() = default;
+
+    uint32_t add(const glm::vec3& pos, size_t external_idx);
+    void remove(const glm::vec3& pos, size_t external_idx);
+    void remove(uint32_t bucket_id, size_t external_idx);
+    std::vector<uint32_t> get_buckets_area(const glm::vec3& pos) const;
+    std::vector<uint32_t> get_buckets_area(uint32_t bucket_id) const;
+    const std::vector<size_t>& get_bucket(uint32_t bucket_id) const;
+private:
+    std::unordered_map<uint32_t, std::vector<size_t>> m_buckets;
+    uint8_t m_intervals_per_axis;
+    glm::vec3 m_min_vec;
+    float m_normalize_value;
+
+    uint32_t get_bucket(const glm::vec3& pos) const;
+};
+[/code]
+
+Step by step:
+[code language="cpp"]
+spp::spp(const uint8_t intervals_per_axis, const float min_val, const float max_val)
+    : m_intervals_per_axis(intervals_per_axis)
+    , m_min_vec{ min_val, min_val, min_val }
+    , m_normalize_value(max_val - min_val) {
+    SPL_ASSERT(m_normalize_value != 0., "SPP interval can't be zero.");
+    SPL_ASSERT(max_val > min_val, "Consider swapping min and max!");
+}
+[/code]
+
+This is the constructor, initializes the auxiliary members and makes some simple controls. The members are a vector (to simplify sintax, it could've been just the value) for the minimum value, another for the interval count (with a maximum number of intervals equal to 0xFF or 255) and a third one for the length of the bounding box (per axis). (By how it works, using either 0 or 1 as the number of intervals will have the same effect).
+
+[code language="cpp"]
+uint32_t spp::add(const glm::vec3& pos, const size_t external_idx) {
+    const auto bid = get_bucket(pos);
+    m_buckets[bid].push_back(external_idx);
+    return bid;
+}
+[/code]
+
+This method adds an element to the structure, the element is referenced with the external_idx (in my case I was using indices to reference each particle outside) and the pos element is just the position of the element.
+
+As you can see, it generates the key associated with the storage bucked using the position, stores the id in the bucket and finally returns the bucket identifier. Since calculating the id from the position is a costly operation, in the rest of the code I optimized a bit the usage of the structure by storing the id of the bucket each particle belongs to. This is not necessary since the position alone is enough to map a particle to a bucket.
+
+[code language="cpp"]
+void spp::remove(const glm::vec3& pos, const size_t external_idx) {
+    remove(get_bucket(pos), external_idx);
+}
+void spp::remove(const uint32_t bucket_id, const size_t external_idx) {
+    auto& b = m_buckets[bucket_id];
+    b.erase(std::find(b.begin(), b.end(), external_idx));
+}
+[/code]
+
+Now we have the remove methods, one overload using the position and the other using directly the bucket id, this is the operation that could be used to argue in favor of using a hashmap of sets instead of one of vectors, but I didn't do any performance comparison to make the change (others parts of the code might work worse in a set than in a vector, because of cache misses and data locality).
+
+Now let's jump to the interesting method, <code>get_bucket</code>:
+
+[code language="cpp"]
+uint32_t spp::get_bucket(const glm::vec3& pos) const {
+    const auto norm = (pos - m_min_vec) / m_normalize_value;
+    return pack(
+        static_cast<uint8_t>(std::floor(m_intervals_per_axis * norm.x)),
+        static_cast<uint8_t>(std::floor(m_intervals_per_axis * norm.y)),
+        static_cast<uint8_t>(std::floor(m_intervals_per_axis * norm.z)));
+}
+[/code]
+
+You can see here what's being done, each coordinate is mapped to the [0, 1] interval using the constructor parameters and then that value is used to obtain a uint8_t value based on the interval divisions. Finally the 3 values are packed on a single uint32_t value using the pack method.
+
+How does this works? Let's think about it in a single dimension:
+<a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;X&space;\in&space;\left&space;[&space;0,&space;1&space;\right&space;]&space;\Rightarrow&space;m\_min\_vec&space;=&space;-1,&space;m\_normalize\_value&space;=&space;2}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;X&space;\in&space;\left&space;[&space;0,&space;1&space;\right&space;]&space;\Rightarrow&space;m\_min\_vec&space;=&space;-1,&space;m\_normalize\_value&space;=&space;2}" title="{\color{White} X \in \left [ 0, 1 \right ] \Rightarrow m\_min\_vec = -1, m\_normalize\_value = 2}" /></a>
+
+Using 8 as the number of intervals (<code>intervals_per_axis</code>), suppose we get pos = -0.3:
+<a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;norm&space;=&space;\frac{-0.3&space;-&space;(-1)}{2}}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;norm&space;=&space;\frac{-0.3&space;-&space;(-1)}{2}}" title="{\color{White} norm = \frac{-0.3 - (-1)}{2}}" /></a>
+<a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;return&space;=&space;floor(8&space;*&space;0.35)&space;=&space;2}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;return&space;=&space;floor(8&space;*&space;0.35)&space;=&space;2}" title="{\color{White} return = floor(8 * 0.35) = 2}" /></a>
+So our bucket id is number 2.
+Doing the same for 0.5 we get: bucket id = 6. And finally, using a value very close to 0.5 we should get either the same bucket or the <i>contiguous</i> ones, for 0.55 -> 6, for 0. 45 -> 5, for 0.75 -> 7. We are effectively dividing the interval in smaller ones with the lenght equal to the size of the bounding box (per axis) divided by the number of intervals and assigning the ids based on within which interval the position falls.
+
+If you've ever read about <a href="http://number-none.com/product/Scalar%20Quantization/">scalar quantization</a> or float packing (like color channels into a single integer) this is the same.
+
+The general result is:
+<ul>
+    <li>It is certain that the maximum distance within elements on the same bucket is equal to: 
+        <a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;\sqrt{\sum_{1}^{N}(\frac{m\_normalize\_value}{m\_intervals\_per\_axis})^{2}}&space;}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;\sqrt{\sum_{1}^{N}(\frac{m\_normalize\_value}{m\_intervals\_per\_axis})^{2}}&space;}" title="{\color{White} \sqrt{\sum_{1}^{N}(\frac{m\_normalize\_value}{m\_intervals\_per\_axis})^{2}} }" /></a>
+    </li>
+    <li>Unfortunately that doesn't mean a single bucket is enough to calculate the density around each particle, since 2 very close particles could end up in neighboring buckets but...</li>
+    <li>We can obtain all the particles that are within X value by using the bucket the particle falls and all the neighboring ones provided that X is smaller than m_normalize_value/m_intervals_per_axis.</li>
+</ul>
+In our one dimensional case, the maximum distance between 2 values in the same bucket is 0.25, and taking any position P within bucket B, we can calculate all the positions with a distance smaller than 0.25 to P by analyzing only the particles in buckets B, B - 1 (if B != 0) and B + 1 (if B != 7). So by dividing our original set in 8, we've reduced the number of positions we need to test to those only in 3 of the 8 buckets (in the worst case).
+
+Moving on:
+
+[code language="cpp"]
+std::vector<uint32_t> spp::get_buckets_area(const uint32_t bucket_id) const {
+    std::vector<uint32_t> buckets;
+    buckets.reserve(3 * 3 * 3); // Max adjacent buckets (think of a rubik's cube)
+    const auto unpacked = unpack(bucket_id);
+    for (int8_t ix = -1; ix < 2; ix++) {
+        const int8_t xval = unpacked[0] + ix;
+        if (xval >= 0 && xval < m_intervals_per_axis) {
+            for (int8_t iy = -1; iy < 2; iy++) {
+                const int8_t yval = unpacked[1] + iy;
+                if (yval >= 0 && yval < m_intervals_per_axis) {
+                    for (int8_t iz = -1; iz < 2; iz++) {
+                        const int8_t zval = unpacked[2] + iz;
+                        if (zval >= 0 && zval < m_intervals_per_axis) {
+                            const auto potential_id = pack(xval, yval, zval);
+                            if (m_buckets.find(potential_id) != m_buckets.end()) {
+                                buckets.push_back(potential_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return buckets;
+}
+[/code]
+
+This code allows us detect this set of bucket+neighbors by calculating the valid values for each part of the packed id (imagine a rubik's cube center, and the positions of all the other pieces). Given a single bucket id we get that one and the 26 neighboring ones (at worst). Finally, pack and unpack are methods to pack 3 (they could be 4) 8 bit integers into a single 32 bit one.
+
+[code language="cpp"]
+static uint32_t pack(const uint8_t x, const uint8_t y, const uint8_t z) {
+    return  x << 16 | y << 8 | z;
+}
+static std::array<uint8_t, 3> unpack(uint32_t value) {
+    return{
+        (value >> 16) & 0xFF,
+        (value >> 8) & 0xFF,
+        value & 0xFF
+    };
+}
+[/code]
+
+<h3>Using the SPP</h3>
+Now that we have our SPP structure up and running, instead of computing the density by calculating the distance to all particles, we: 
+<ul>
+    <li>Add all particles to the SPP and then,</li>
+    <li>For each particle updated we obtain the set of buckets neighboring it and,</li>
+    <li>Calculate the distance to all particles within those buckets and those only:</li>
+</ul>
+ 
+[code language="cpp"]
+void load_particles(std::vector<Particle>& particles) {
+    for (auto ix = 0u; ix < particles.size(); ix++) {
+        // Note we store the bucket id outside to reduce the amount of times we need to calculate it later.
+        p.bucket_id = spp.add(p.position, ix);
+    }
+}
+
+void update_density(std::vector<Particle>& particles) {
+    for (auto ix = 0u; ix < particles.size(); ix++) {
+        auto& p1 = particles[ix];
+        auto buckets = spp.get_buckets_area(p1.bucket_id);
+        for (auto jx = 0u; jx < buckets.size(); jx++) {
+            auto& bucket = spp.get_bucket(buckets[jx]);
+            for (auto kx = 0u; kx < bucket.size(); kx++) {
+                auto& p2 = particles[bucket[kx]];
+                if (p1.dist2(p2) < THRESHOLD_DIST) {
+                    p1.density++;
+                }
+            }
+        }
+    }
+}
+[/code]
+ 
+Note that now, I'm again repeating a bit of work, since I'm not updating both density values in the same loop, the thing is I can no longer ensure how the particles will be iterated, so trying to avoid counting twice gets more complicated. The savings of using the spp are more than enough to compensate for this (and the possible complexity of an algorithm that would correctly skip already made comparisons).
+ 
+After this, calculating the color for each particle it's just a matter of finding the maximum density and getting an RGBA value based on the density of each particle in comparison with the maximum one. I've used someting along this lines:
+[code language="cpp"]
+Color color_for_particle(Particle& p, const uint32_t max_density) {
+    float alive_value = p.isAlive() ? 1.f : 0.f; //Just cast it if you like :)
+    return Color {
+        alive_value,
+        (p.density / max_density) * alive_value,
+        (p.density / max_density) * alive_value,
+        alive_value
+    };
+}
+[/code]
+
+You can see in the history of the repo, that at first this calculation was performed on CPU and then forwarding the color directly on the shader. Obviously this is not the best thing, in the current version, only the maximum value is calculated in CPU then passed as a uniform, and the density por particle is passed as another attribute. That way, the calculation can be performed on the GPU.
+
+<h1>Blue, Red and distance to center</h1>
+In this demo, the calculations are much simpler, nothing is done on the CPU and the shader outputs Red if the particle distance to the center is less than 1 and Blue otherwise.
+[code language="cpp"]
+Color color_for_particle_blue(Particle& p) {
+    float alive_value = p.isAlive() ? 1.f : 0.f; //Just cast it if you like :)
+    float r = (p.length <= 1.) ? 1.f : 0.f; //Just cast it if you like :)
+    return Color {
+        r,
+        0.f,
+        1.f - r,
+        alive_value
+    };
+}
+[/code]
+
+<h1>Footnote on the SPP number of intervals</h1>
+The number of buckets directly influences the amount of comparisons we need to perform but also the maximum distance 2 particles can have. We need to instantiate the SPP with the correct value so to skip as many particles as possible and to avoid missing particles that should be part of the density. To calculate it we need to 'enclose' the volume within the particle in the cube created by the bucket the particle belongs and all the neighbors:
+<ul>
+    <li>Having chosen a density threshold equal to <code>srqr(0.004) ~ 0.0632</code> we need an bucket size (per axis) that is at least this big.</li>
+    <li>We know the maximum value a coordinate can have is 1, and the minimum is -1, so our bbox is 2 units wide on each axis</li>
+</ul>
+<a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;threshold&space;\leqslant&space;bucket\_size\_per\_axis&space;}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;threshold&space;\leqslant&space;bucket\_size\_per\_axis&space;}" title="{\color{White} threshold \leqslant bucket\_size\_per\_axis }" /></a>
+<a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;threshold&space;\leqslant&space;\frac&space;{bbox\_size\_per\_axis}{intervals\_per\_axis}&space;}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;threshold&space;\leqslant&space;\frac&space;{bbox\_size\_per\_axis}{intervals\_per\_axis}&space;}" title="{\color{White} threshold \leqslant \frac {bbox\_size\_per\_axis}{intervals\_per\_axis} }" /></a>
+<a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;sqrt(0.004)&space;\leqslant&space;\frac{2}{intervals\_per\_axis}&space;}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;sqrt(0.004)&space;\leqslant&space;\frac{2}{intervals\_per\_axis}&space;}" title="{\color{White} sqrt(0.004) \leqslant \frac{2}{intervals\_per\_axis} }" /></a>
+<a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;intervals\_per\_axis&space;\leqslant&space;\frac{2}{sqrt(0.004)}&space;}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;intervals\_per\_axis&space;\leqslant&space;\frac{2}{sqrt(0.004)}&space;}" title="{\color{White} intervals\_per\_axis \leqslant \frac{2}{sqrt(0.004)} }" /></a>
+
+<a href="https://www.codecogs.com/eqnedit.php?latex={\color{White}&space;intervals\_per\_axis&space;\leqslant&space;~31.622&space;\Rightarrow&space;intervals\_per\_axis&space;=&space;31}" target="_blank"><img class="aligncenter" src="https://latex.codecogs.com/png.latex?{\color{White}&space;intervals\_per\_axis&space;\leqslant&space;~31.622&space;\Rightarrow&space;intervals\_per\_axis&space;=&space;31}" title="{\color{White} intervals\_per\_axis \leqslant ~31.622 \Rightarrow intervals\_per\_axis = 31}" /></a>
+
+This number of intervals per axis, give us a bucket size (per axis) of ~0.645 units, the smallest value not smaller than our threshold. This ensures that even the worst case scenario is covered, and all particles that will contribute to the density of a given particle are tested. 
+
+The worst case scenario is given by a particle laying on any of the bordering planes of the bucket. Thinking again in our 1 dimensional sample, if our threshold is 0.26, having 8 divisions is too much: a sample with the position 0.5 will be in bucket 6, and a sample with position 0.245 will end up in bucket 4. Those 2 won't be compared since are not in neighboring buckets even if the distance between them is less than 0.26.
+
+OK! The end! You've made it through a long article about details of an unimportant demo, congrats! At least I hope you get something useful out of it. You can refer to the <a href="https://marianogonzalezn.wordpress.com/2016/04/26/particles-1/">previous</a> article for the original story and the source code.
 <a href="#top">Back to Top</a>
 <hr>
 <a id="es"></a>

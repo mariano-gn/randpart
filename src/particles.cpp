@@ -47,7 +47,7 @@ static const std::string k_dualc_loc = "Dual_Color_Demo";
 
 particles::particles(std::shared_ptr<glprogram> active_program, const uint32_t max_number, const particle_layout_type lt, const bool stop_after_load)
     : m_dis01(0.f, 1.f)
-    , m_dism11(-1.f, 1.f)
+    , m_dis11(-1.f, 1.f)
     , m_lt(lt)
     , m_particles_render_data(max_number)
     , m_particles_data(max_number)
@@ -194,7 +194,7 @@ void particles::gen_particle_position(const size_t index) {
     switch (m_lt) {
         case particle_layout_type::RANDOM_CARTESIAN_DISCARD: {
             do {
-                candidate = glm::vec3(m_dism11(m_generator), m_dism11(m_generator), m_dism11(m_generator));
+                candidate = glm::vec3(m_dis11(m_generator), m_dis11(m_generator), m_dis11(m_generator));
             } while (glm::length2(candidate) > 1.f);
         } break;
         case particle_layout_type::RANDOM_SPHERICAL_NAIVE: {
@@ -205,13 +205,13 @@ void particles::gen_particle_position(const size_t index) {
         } break;
         case particle_layout_type::DEMO_DUAL_COLOR_SLICE : {
             normalize = false;
-            candidate = glm::vec3(m_dism11(m_generator), m_dism11(m_generator), 0);
+            candidate = glm::vec3(m_dis11(m_generator), m_dis11(m_generator), 0);
         } break;
         case particle_layout_type::RANDOM_CARTESIAN_CUBE: {
             normalize = false;
         } // Note no break.
         case particle_layout_type::RANDOM_CARTESIAN_NAIVE: {
-            candidate = glm::vec3(m_dism11(m_generator), m_dism11(m_generator), m_dism11(m_generator));
+            candidate = glm::vec3(m_dis11(m_generator), m_dis11(m_generator), m_dis11(m_generator));
         } break;
     }
     m_particles_render_data[index].pos = (normalize) ? glm::normalize(candidate) : candidate;

@@ -55,11 +55,11 @@ static uint32_t pack(const uint8_t x, const uint8_t y, const uint8_t z) {
     return  x << 16 | y << 8 | z;
 }
 static std::array<uint8_t, 3> unpack(uint32_t value) {
-    return{
-        (value >> 16) & 0xFF,
-        (value >> 8) & 0xFF,
-        value & 0xFF
-    };
+    return {{
+        static_cast<uint8_t>((value >> 16) & 0xFF),
+        static_cast<uint8_t>((value >> 8) & 0xFF),
+        static_cast<uint8_t>(value & 0xFF)
+    }};
 }
 std::vector<uint32_t> spp::get_buckets_area(const uint32_t bucket_id) const {
     std::vector<uint32_t> buckets;

@@ -98,7 +98,7 @@ class particles {
 public:
     // TODO: Changes in program?
     particles(
-        std::shared_ptr<glprogram> active_program, 
+        std::shared_ptr<glprogram> active_program,
         uint32_t max_number = 20000,
         particle_layout_type lt = particle_layout_type::RANDOM_CARTESIAN_CUBE,
         bool stop_after_load = false);
@@ -114,7 +114,7 @@ public:
 
 private:
     std::mt19937 m_generator{ std::random_device{}() };
-    std::uniform_real_distribution<float> m_dism11, m_dis01;
+    std::uniform_real_distribution<float> m_dis01, m_dis11;
     GLuint m_vao, m_vbo, m_ebo;
     particle_layout_type m_lt;
     std::vector<particle_render_data> m_particles_render_data;

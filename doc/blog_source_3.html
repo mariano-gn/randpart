@@ -1,0 +1,210 @@
+<a href="#es">Español</a>
+<a id="top"></a>
+<br>
+Hello!
+
+Another article on Particles! This time, adding a bit about calculating the desity. Remember I said:
+<blockquote>
+    Note that now, I'm again repeating a bit of work, since I'm not updating both density values in the same loop, the thing is I can no longer ensure how the particles will be iterated, so trying to avoid counting twice gets more complicated. The savings of using the spp are more than enough to compensate for this (and the possible complexity of an algorithm that would correctly skip already made comparisons).
+</blockquote>
+
+That actually it's partially true, and the rest of the truth comes with today's article.
+<h1>Multithreading for density calculation</h1>
+If you remember our last 'pseudo'-version of the density calculation was
+[code language="cpp"]
+void load_particles(std::vector<Particle>& particles) {
+    for (auto ix = 0u; ix < particles.size(); ix++) {
+        // Note we store the bucket id outside to reduce the amount of times we need to calculate it later.
+        p.bucket_id = spp.add(p.position, ix);
+    }
+}
+
+void update_density(std::vector<Particle>& particles) {
+    for (auto ix = 0u; ix < particles.size(); ix++) {
+        auto& p1 = particles[ix];
+        auto buckets = spp.get_buckets_area(p1.bucket_id);
+        for (auto jx = 0u; jx < buckets.size(); jx++) {
+            auto& bucket = spp.get_bucket(buckets[jx]);
+            for (auto kx = 0u; kx < bucket.size(); kx++) {
+                auto& p2 = particles[bucket[kx]];
+                if (p1.dist2(p2) < THRESHOLD_DIST) {
+                    p1.density++;
+                }
+            }
+        }
+    }
+}
+[/code]
+This code, is suitable for a very easy transformation into a multithreaded version, since each 'loop' only affects 1 particle, and all the rest of the code reads values (other than the updated one), we can distribute the work into as many worker threads as we want:
+[code language="cpp"]
+void update_density(std::vector<Particle>& particles) {
+    static const auto max_threads = std::thread::hardware_concurrency() >  1u ? std::thread::hardware_concurrency() - 1u : 1u;
+    auto update_fn = [this, &particles](const uint32_t range_begin, const uint32_t range_end) {
+        for (auto ix = range_begin; ix < range_end; ix++) {
+            auto& p1 = particles[ix];
+            auto buckets = spp.get_buckets_area(p1.bucket_id);
+            for (auto jx = 0u; jx < buckets.size(); jx++) {
+                auto& bucket = spp.get_bucket(buckets[jx]);
+                for (auto kx = 0u; kx < bucket.size(); kx++) {
+                    auto& p2 = particles[bucket[kx]];
+                    if (p1.dist2(p2) < THRESHOLD_DIST) {
+                        p1.density++;
+                    }
+                }
+            }
+        }
+    }
+    std::vector<std::thread> workers;
+    const size_t bucket_size = particles.size() / max_threads;
+    for (auto ix = 0u; ix < max_threads; ix++) {
+        size_t rbegin = ix * bucket_size;
+        size_t rend = rbegin + bucket_size;
+        workers.push_back(std::thread(std::bind(update_fn, rbegin, rend)));
+    }
+
+    for (auto& worker : workers) {
+        worker.join();
+    }
+}
+[/code]
+The function now changed <i>very</i> little, but now is able to distribute the calculation work on as many cores the machine has available (but one, for the main thread). There are 3 things to note though, 1 positive, 1 improvement and 1 philosophical approach to evaluate.
+<h2>Lockless programming</h2>
+One of the biggest consumers of the performance when trying to parallelize algorithms is the use of locks. Regardless of how good we program to avoid deadlocks, I read somewhere that
+<blockquote>if you lock, you are not multithreading</blockquote>
+It's a little exaggerated, but it gets to the point, by locking not only the process gets serialized but also locking operations are really costly.
+
+What it should be done instead is what's known as <i>lockless programming</i>, a series of techniques and ideas around dealing with shared data and organizing such data to avoid using locks while ensuring correct results.
+In our case, this is achieved because of 2 things:
+<ul>
+    <li>Write to memory 'owned' by the thread only from that thread.</li>
+    <li>Read from any area of the memory that's not being updated by any other thread.</li>
+</ul>
+The first point is related to the only write operation performed, <code>p1.density++</code> this operation will be performed only for <code>p1</code> particles obtained from the index within the range, and since the ranges do not overlap, not 2 threads will ever write into the same position in memory. We've ensured no data corruption.
+
+The second point is related to the rest of the code, we're reading memory from any particle, but only the parts that we know won't change in the entire execution of the algorithm (position, particles, spp, all is only read during the process). We've ensured no dirty readings.
+
+As you can see, if we updated particles potentially outside the range (like p2 in the very first versions of the algoritm) we would need to resort to either locking (something we <b>don't</b> want) or by using a thread_local or per-thread structure to store per-thread results and aggregate at the end. The problem is this would be yet another complexity added to the algorithm.
+<h2>Thread pools</h2>
+Here, the way the threads 'work' is akin to the concept of thread pools and/or worker threads. And this is a certain improvement that I didn't took the time to do so far.
+
+This method would create N threads <i>each</i> time the function is called, only to kill them as soon as the function finishes. This could be fine if it were a one shot setup, but in the context of doing this maybe once per frame, it's not acceptable on a production code. Creating and destroying threads is not a lightweight operation.
+
+What should be done is to implement a thread pool, to request and recicle threads, waiting to work and never being deleted until the end of the execution, or...
+<h2>Task based programming</h2>
+And here comes the philosophical approach. Something that is every day more relevant in the era of multithreading and multicore systems. Instead of thinking in terms of threads we should think in terms of tasks or jobs or however you want to call them.
+
+Maybe for this particular demo it would be overkill, maybe not, but the idea is to think how each huge process can be split into many smaller pieces of work that would eventually contribute to the final product. It would also be based on a thread pool (or some other abstraction to encapsulate the working power), but it should include the concept of task.
+
+Worker threads only execute tasks, that should be small enough to take advantage of having multiple processing units, but big enough to avoid spending too much time in context switching. Usually this is tuned by testing the system and its tasks, but after that there will be many more tasks that threads and some form of scheduler will take care of the distribution of work.
+
+For this purposes, there is a library called <a href="https://www.threadingbuildingblocks.org/">TBB (Threading Building Blocks)</a> from Intel that I recommend you to check out. And if this task based programming caught your attention, I recommend <a href="https://software.intel.com/en-us/node/506100">this</a> series of articles and the TBB documentation to read. Really interesting and detailed.
+
+This time is short and to the point, but I hope you find the article interesting! Have a nice start of the week!
+<br>
+<a href="#top">Back to Top</a>
+<hr>
+<a id="es"></a>
+<br>
+¡Buenas!
+
+¡Otro artículo con las Partículas! Esta vez, agregando un poco sobre calcular la densidad. Recuerdan que dije:
+
+Another article on Particles! This time, adding a bit about calculating the desity. Remember I said:
+<blockquote>
+    Noten que nuevamente estoy repitiendo algo de trabajo, porque ya no actualizo la densidad de ambas partículas en la misma iteración, esto se debe a que ya no se puede asegurar el orden en el que las partículas van a ser visitadas, así que tratar de evitar este doble cálculo se vuelve más complicado. El ahorro de utilizar el spp justifica más que suficientemente por esto (y por la posible complejidad del algoritmo para saltearse correctamente las comparaciones ya realizadas).
+</blockquote>
+
+Esto en realidad, es parcialmente cierto y el resto de la verdad viene en el artículo de hoy.
+<h1>Multithreading para el cálculo de densidad</h1>
+Si se acuerdan la última 'pseudo'-versión del cálculo de densidad era
+[code language="cpp"]
+void load_particles(std::vector<Particle>& particles) {
+    for (auto ix = 0u; ix < particles.size(); ix++) {
+        // Note we store the bucket id outside to reduce the amount of times we need to calculate it later.
+        p.bucket_id = spp.add(p.position, ix);
+    }
+}
+
+void update_density(std::vector<Particle>& particles) {
+    for (auto ix = 0u; ix < particles.size(); ix++) {
+        auto& p1 = particles[ix];
+        auto buckets = spp.get_buckets_area(p1.bucket_id);
+        for (auto jx = 0u; jx < buckets.size(); jx++) {
+            auto& bucket = spp.get_bucket(buckets[jx]);
+            for (auto kx = 0u; kx < bucket.size(); kx++) {
+                auto& p2 = particles[bucket[kx]];
+                if (p1.dist2(p2) < THRESHOLD_DIST) {
+                    p1.density++;
+                }
+            }
+        }
+    }
+}
+[/code]
+Este código, conveniente para una transformación muy simple a una versión paralelizada, dado que cada 'loop' solo afecta 1 partícula y todo el resto del código lee valores (diferentes del que es actualizado), podemos distribuir el trabajo en tantos <i>worker threads</i> como se requiera:
+[code language="cpp"]
+void update_density(std::vector<Particle>& particles) {
+    static const auto max_threads = std::thread::hardware_concurrency() >  1u ? std::thread::hardware_concurrency() - 1u : 1u;
+    auto update_fn = [this, &particles](const uint32_t range_begin, const uint32_t range_end) {
+        for (auto ix = range_begin; ix < range_end; ix++) {
+            auto& p1 = particles[ix];
+            auto buckets = spp.get_buckets_area(p1.bucket_id);
+            for (auto jx = 0u; jx < buckets.size(); jx++) {
+                auto& bucket = spp.get_bucket(buckets[jx]);
+                for (auto kx = 0u; kx < bucket.size(); kx++) {
+                    auto& p2 = particles[bucket[kx]];
+                    if (p1.dist2(p2) < THRESHOLD_DIST) {
+                        p1.density++;
+                    }
+                }
+            }
+        }
+    }
+    std::vector<std::thread> workers;
+    const size_t bucket_size = particles.size() / max_threads;
+    for (auto ix = 0u; ix < max_threads; ix++) {
+        size_t rbegin = ix * bucket_size;
+        size_t rend = rbegin + bucket_size;
+        workers.push_back(std::thread(std::bind(update_fn, rbegin, rend)));
+    }
+
+    for (auto& worker : workers) {
+        worker.join();
+    }
+}
+[/code]
+La función ha cambiado <i>muy</i> poco, pero ahora es capaz de distribuir el trabajo de cálculo en cuantos cores tenga la máquina disponibles (excepto 1 para el thread principal). Sin embargo, hay 3 cosas para notar, 1 positiva, 1 mejora, y una aproximación filosófica a evaluar.
+<h2>Programación sin locks</h2>
+Uno de los más grandes consumidores de performance cuando se trata de paralelizar algoritmos es el uso de locks. Más allá de que tan bien uno programe para evitar deadlocks, leí en algún lado que
+<blockquote>si usás locks, no estás paralelizando</blockquote>
+Aunque un poco exagerado hay un punto que es verdad, al bloquear no solo se serializa el trabajo, sino que además la operación de bloquear es costosa por sí misma.
+
+Lo que se debería hacer en lugar de ello, es lo que se conoce como <i>lockless programming</i>, una serie de técnicas e ideas para trabajar con datos compartidos y organizar esos datos de manera de evitar la utilización de locks asegurando resultados correctos.
+En nuestro caso, esto se logra a través de 2 cosas:
+<ul>
+    <li>Escribir a memoria 'poseída' por un thread, solo desde ese thread.</li>
+    <li>Leer cualquier área de memoria, únicamente si no está siendo actualizada por ningún otro thread.</li>
+</ul>
+El primer punto está relacionado a la única operación de escritura realizada, <code>p1.density++</code>. Esta operación se realiza únicamente con <code>p1</code> siendo una partícula obtenida a través del índice dentro del rango asignado al thread, y como los rangos no se solapan, no hay 2 threads distintos que escriban a la misma posición de memoria. Con esto se asegura que no hay corrupción de datos.
+
+El segundo punto está relacionado al resto del código, donde leemos memoria de cualquier partícula, pero solo las partes que sabemos no cambian durante la ejecución del algoritmo (posición, partículas, spp, todo es solamente leído durante el proceso). Con lo que se asegura que no hay 'lecturas sucias'.
+
+Como ven, si actualizaramos partículas potencialmente fuera del rango (como p2 en las primeras versiones del algoritmo) necesitaríamos utilizar o bien locks (cosa que <b>no</b> es deseado) o memoria local a cada thread (thread_local o estructura subdividida) para almacenar los resultados por thread y agregarlos al final. El problema es que esto sería otra nueva forma de aumentar la complejidad del algoritmo.
+<h2>Thread pools</h2>
+Aquí, la manera en la que los threads 'trabajan' es similar a la encontrada en el concepto de <i>thread pools</i> y/o <i>worker threads</i>. Y esta es justamente la mejora en la que no me tomé el tiempo de trabajar hasta ahora.
+
+Este método va a crear N threads <i>cada vez</i> que la función se llame, para destruírlos en cuanto termine. Esto podría estar bien para alguna función que se llamase 1 vez, pero en el contexto de realizar este trabajo capaz una vez por frame, no es aceptable en código de producción. Crear y destruir threads no es una operación barata.
+
+Lo que se debería realizar es una implementación de una thread pool, para pedir, liberar y recilar hilos, que están constantemente esperando nuevo trabajo y nunca son eliminados hasta el final de la ejecución, o...
+
+<h2>Programación basada en tareas</h2>
+Y acá es donde viene la idea filosófica. Algo que es cada vez más relevante en la era de multithreading y sistemas multicore. En lugar de pensar en términos de hilos, uno debería pensar en términos de tareas, trabajos (o como le quieran llamar).
+
+Aunque quizás para esta demo fuese demasiado (o no), la idea es pensar en como dividir grandes procesos en muchas partes pequeñas que eventualmente contribuyan al producto final. También se basaría en un thread pool (o alguna abstracción para encapsular el poder de trabajo), pero además incluyendo el concepto de tarea.
+
+Los threads solo ejecutarían tareas, suficientemente pequeñas como para tomar ventaja de las múltiples unidades de procesamiento, pero suficientemente grandes como para evitar gastar un excesivo tiempo cambiando de contexto. Usualmente este ajuste se realiza testeando el sistema y sus tareas, pero luego terminan quedando muchas más tareas que threads y algún tipo de <i>scheduler</i> se encarga de la distribución de trabajo.
+
+Para este tipo de propósito, hay una librería llamada <a href="https://www.threadingbuildingblocks.org/">TBB (Threading Building Blocks)</a> de Intel que recomiendo investigar. Y si esta brevísima intro a programación basada en tareas, sonó interesante recomiendo <a href="https://software.intel.com/en-us/node/506100">ésta</a> serie de artículos y la documentación de TBB para leer, lamento mucho pero aún no encuentro algo en español, así que inglés va a tener que ser un requisito por ahora, sin embargo lo vale, son muy interesantes y detallados.
+
+¡Esta vez fue cortito y al pié, pero espero que lo hayan encontrado interesante! ¡Que comiencen bien la semana!
+<a href="#es">Inicio</a>

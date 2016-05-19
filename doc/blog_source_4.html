@@ -1,0 +1,334 @@
+<a href="#es">Español</a>
+<a id="top"></a>
+<br>
+Hello!
+
+Continuing with the articles from the Particles demo. This time not that much related with Particles though, I'll present you the camera implementation I made. A very simple version of a orbit-dolly-pan camera using the <a href="http://glm.g-truc.net/">GLM Math library</a>.
+ <h1>Camera operations</h1>
+ First things first, a definitions for the 3 operations.
+ <h4>Orbit</h4>
+ Orbiting the camera works as in "orbit around the planet". The camera has a pivot point and moves over the surface of the sphere with center on that pivot and radius equal to the distance between the camera position and the point.
+
+ The operation doesn't change neither the pivot nor the distance between pivot and camera.
+ <h4>Pan</h4>
+ Pan operations allow the camera to move in the plane given by the position of the camera and the forward vector, just like panning an image on any visualization app.
+
+ In my case, this operation does change the pivot point position but not the distance between it and the camera.
+ <h4>Dolly</h4>
+ This operation is usually confused with zoom or named zoom incorrectly, the operation moves the camera within its forward vector. The confusion comes from the fact that zoom adjust the <a href="https://en.wikipedia.org/wiki/Field_of_view">field of view</a>, so both operation increase/decrease the elements size on screen but they're different in terms of implementation and final results.
+
+ Also, they work on different matrices, while dolly adjust the view matrix (when changing the camera position), zooming will change the perspective and, in consequence, the projection matrix.
+<h1>Particles Camera</h1>
+<h2>Public interface</h2>
+[code language="cpp"]
+class camera {
+public:
+    camera(const glm::vec2& screen);
+    void screen_change(const glm::vec2& screen);
+    void home();
+
+    void dolly(float dz);
+    void pan(const glm::vec2& dd);
+    void orbit(const glm::vec2& dd);
+
+    const glm::mat4x4& get_vp() const;
+
+    ~camera() = default;
+[/code]
+The only parameter is the screen resolution (<code>glm::vec2{width, height}</code>), I didn't make it very customizable...
+
+Then we have <code>screen_change(...)</code>, which is a function to call when the size of the viewable area (viewport) changed, and <code>home()</code> used to set the default parameters for the camera.
+
+After that we have the operations <code>orbit(...)</code>, <code>pan(...)</code> and <code>dolly(...)</code>.
+<code>orbit(...)</code> and <code>pan(...)</code> receive a 2-dimensional displacement (i.e. screen coordinates) and <code>dolly(...)</code> a relative displacement over the forward vector (I use a right hand system with Y pointing up, hence <i>dz</i>).
+
+Finally we have a default destructor and the function to retrieve the view-projection matrix suitable to use on the final shader.
+<h2>Private members</h2>
+[code language="cpp"]
+private:
+    glm::vec3 m_pos, m_lookAt, m_up;
+    float m_pan_vel = .1f;
+    float m_dolly_vel = 3.f;
+    float m_orbit_vel = 4.f;
+
+    glm::mat4x4 m_projection;
+    mutable glm::mat4x4 m_vp;
+    mutable bool m_dirty = true;
+[/code]
+The first three members are used to keep track of where the camera is, where is looking at (point in space, the pivot for orbit, not just a direction) and where is the <i>up</i> direction.
+
+Later we have 3 velocity modifiers for each operation that I tuned for the particles. They could be exposed and modified but I didn't find that necesary for the demo. They affect how fast (or slow) the camera moves on each operation.
+
+After that we have the projection matrix (that only changes by screen changes) and 2 mutable members. They're mutable because they're used on a const method but they're intended as a cache for an optimization, the valuable members are those used for position, lookAt and up.
+
+I did this that way because on each operation is easier to modify this members, but calculating the view-projection matrix each frame, even if the camera didn't moved looked like a waste. As any cache, the dirty flag is used to update it.
+<h2>Implementation</h2>
+[code language="cpp"]
+camera::camera(const glm::vec2& screen) {
+    screen_change(screen);
+    home();
+}
+
+void camera::screen_change(const glm::vec2& screen) {
+    m_projection = glm::perspective(glm::radians(45.f), screen.x / screen.y, .5f, 100.f);
+
+    m_dirty = true;
+}
+
+void camera::home() {
+    m_pos = glm::vec3{ 0.f, 0.f, 2.7f };
+    m_lookAt = glm::vec3{ 0.f, 0.f, 0.f };
+    m_up = glm::vec3{ 0.f, 1.f, 0.f };
+    m_dirty = true;
+}
+[/code]
+First three methods, nothing really important. The constructor just delegates the work on the other 2. <code>screen_change</code> recalculates the projection matrix as a perspective projection with Pi/4 radians for the vertical field of view and .5 and 100 as near and far planes (lots of space to dollying in the particle demo that is around (0, 0, 0)). I'm relying on the GLM implementation of the perspective matrix construction :)
+
+Note: I'm using <code>glm::radians</code> because I force GLM to work on radians. And I work on radians because... I don't know, I got used to it.
+
+As you can see, plenty more parameters to expose :)
+<h3>Dolly</h3>
+[code language="cpp"]
+void camera::dolly(const float dz) {
+    // TODO: Dolly based on hit point (not center, using mouse screenpos)
+    const auto move = m_pos - m_lookAt;
+    const auto curr_dist = glm::length(move);
+    const auto new_dist = glm::clamp(dz * m_dolly_vel + curr_dist, 1.f, 50.f);
+
+    m_pos = m_lookAt + (glm::normalize(move) * new_dist);
+    m_dirty = true;
+}
+[/code]
+The dolly operation first calculates the current inverse forward vector and its length
+
+Then calculates the new distance by adding the displacement scaled by the velocity parameter (the clamp operation ensures at least one unit and no more than 50).
+
+Finally obtains the new position of the camera with the inverse forward vector and the new distance. As I said, since this operation changes camera properties, the dirty flag is activated.
+<h3>Pan</h3>
+[code language="cpp"]
+void camera::pan(const glm::vec2& dd) {
+    // TODO: Pan with hit point always below mouse (using mouse screenpos)
+    auto adjusted_dd = dd * m_pan_vel;
+
+    auto rev_foward = glm::normalize(m_pos - m_lookAt);
+    auto right_move = glm::normalize(glm::cross(m_up, rev_foward)) * -adjusted_dd.x;
+    auto up_move = m_up * adjusted_dd.y;
+    auto move = up_move + right_move;
+    m_pos += move;
+    m_lookAt += move;
+    m_dirty = true;
+}
+[/code]
+Pan modifies both the pivot point and the camera position. Doing a similar operation than dolly it calculates the new position moving the camera left or right and top or bottom depending on the x and y displacements respectively.
+
+It then applies the same displacement to the lookAt point (pivot) so to maintain the same forward vector and its length.
+<h3>Orbit</h3>
+[code language="cpp"]
+void camera::orbit(const glm::vec2& dd) {
+    // TODO: Orbit with hit point always below mouse (using mouse screenpos)
+    auto adjusted_dd = dd * m_orbit_vel;
+    auto rev_foward = m_pos - m_lookAt;
+    const auto len_rf = glm::length(rev_foward);
+    rev_foward = glm::normalize(rev_foward);
+
+    const auto h_rot = glm::rotate(glm::radians(-adjusted_dd.x), m_up);
+    const auto v_rot = glm::rotate(glm::radians(-adjusted_dd.y), glm::normalize(glm::cross(m_up, rev_foward)));
+    m_pos = m_lookAt + glm::vec3{ h_rot * v_rot * glm::vec4{ rev_foward, 0.f } } * len_rf;
+    m_up = glm::vec3{ v_rot * glm::vec4{ m_up, 0.f } };
+    m_dirty = true;
+}
+[/code]
+Orbit is a bit more complex, but not that much. Think of 2 rings around the pivot point, one horizontal and one vertical, what it does is calculate 2 rotation matrices over this 2 rings using the displacement parameter and the velocity factor.
+Then rotates the inverse forward vector and calculates the new position adding it to the pivot point. The up vector then is only affected by the vertical rotation.
+<h3>Obtaining the vp matrix</h3>
+[code language="cpp"]
+const glm::mat4x4& camera::get_vp() const {
+    if (m_dirty) {
+        m_vp = m_projection * glm::lookAt(m_pos, m_lookAt, m_up);
+        m_dirty = false;
+    }
+    return m_vp;
+}
+[/code]
+As you can see the view projection matrix is calculated only if the dirty flag is set, otherwise is simply returned. Once again, I'm simplifying by work by using the <code>glm::lookAt</code> function that generates the view matrix using position, lookAt and up vectors.
+<h3>TODO, position on screen</h3>
+If you noticed, all the methods start with a TODO note. The thing is all of them work on a simplistic way that was good enough for me, and in some cases is the correct and easiest way. But, a possible modification for each involves maintaining some constraint related to the screen position in which the movement was triggered.
+
+In the case of dolly, this implementation keeps whatever pixel was in the center of the screen, always below the center of the screen but, if we think of the screen hit point as the origin of a ray that will intersect with someting in the 3D world (ray picking), the alternative would be to give relevance to the position in which the dolly is performed tilting the displacement of the camera towards the point of intersection of the ray and the world.
+
+This wouldn't change the foward vector, but the displacement vector would be calculated with the intersection point and the camera position, instead of the pivot point.
+
+For pan and orbit, our constraint could be that the intersection point in the 3D world of the screen hit point should always be the same during the entire operation. (Whatever is below the mouse or finger, stays below the mouse or finger)
+
+This 3 things are a little more complex to achieve and it wasn't very important for showing some particles floating with no other reference to me, so they're "left as an exercise for the reader".
+
+This article belongs to the <i>Particles!</i> series, you can see previous entries <a href="https://marianogonzalezn.wordpress.com/2016/04/26/particles-1/">here</a>, <a href="https://marianogonzalezn.wordpress.com/2016/05/09/particles-2/">here</a> and <a href="https://marianogonzalezn.wordpress.com/2016/05/16/particles-3-multithreading/">here</a>. <a href="https://github.com/mariano-gn/randpart">Here</a> is the repo for the particles demo. Hope you like it!
+<br>
+<a href="#top">Back to Top</a>
+<hr>
+<a id="es"></a>
+<br>
+¡Hola!
+
+Continuando con los artículos de la demo de partículas. Esta vez no muy relacionado con partículas, les presento la implementación de la cámara que hice. Una versión muy simple de una cámara orbit-dolly-pan usando la <a href="http://glm.g-truc.net/">librería de matemática GLM</a>.
+ <h1>Operaciones de la cámara</h1>
+ Antes que nada, una definición de las 3 operaciones.
+ <h4>Orbit</h4>
+ Orbit (de orbitar) como en "orbita alrededor del planeta". La camara tiene un punto de pivote y se mueve sobre la superficie de la esfera con centro en el pivote y radio igual a la distancia entre él y la posición de la cámara.
+
+ Esta operación no cambia ni el pivote, ni la distancia entre él y la cámara.
+ <h4>Pan</h4>
+ La operación de pan ('panear') permite a la cámara moverse en el plano dado por la posición de la cámara y el vector <i>forward</i> (hacia donde la cámara mira), del mismo modo que se mueve una imagen en una aplicación de visualización.
+
+ En mi caso, esta operación sí cambia el punto de pivote pero no modifica la distancia entre él y la cámara.
+ <h4>Dolly</h4>
+ Esta operación usualmente se confunde con zoom o se la nombra incorrectamente, la operación mueve la cámara a lo largo del vector <i>forward</i>. La confusión viene del hecho de que el zoom ajusta el ángulo de cámpo visual (<a href="https://en.wikipedia.org/wiki/Field_of_view">field of view</a>), por lo que ambas agrandan o achican el tamaño de los elementos en la pantalla pero son diferentes en términos de implementación y resultados.
+
+ Además, trabajan en diferentes matrices, mientras que dolly ajusta la matriz de vista (al cambiar la posición de la cámara), el zoom cambia la perspectiva y, por ende, la matriz de proyección.
+<h1>La cámara para las partículas</h1>
+<h2>Interfaz pública</h2>
+[code language="cpp"]
+class camera {
+public:
+    camera(const glm::vec2& screen);
+    void screen_change(const glm::vec2& screen);
+    void home();
+
+    void dolly(float dz);
+    void pan(const glm::vec2& dd);
+    void orbit(const glm::vec2& dd);
+
+    const glm::mat4x4& get_vp() const;
+
+    ~camera() = default;
+[/code]
+El único parámetro es la resolución de pantalla (<code>glm::vec2{ancho, alto}</code>), no hice la cámara muy parametrizable...
+
+Luego están <code>screen_change(...)</code>, que es una función para llamar cuando cambia el tamaño del área visible (viewport), y <code>home()</code> usada para setear todos los valores por defecto del resto de los parámetros de la cámara.
+
+Al final las operaciones <code>orbit(...)</code>, <code>pan(...)</code> y <code>dolly(...)</code>.
+<code>orbit(...)</code> y <code>pan(...)</code> reciben un desplazamiento bidimensional (p.e. coordenadas de pantalla) y <code>dolly(...)</code>  un desplazamiento relativo sobre el vector <i>forward</i> (uso un sistema de mano derecha con la Y apuntando hacia arriba, por eso <i>dz</i>).
+
+Finalmente tenemos el destructor por defecto y la función para obtener la matriz vista-proyección (<i>view-projection</i>) adecuada para usar en el shader final.
+<h2>Miembros privados</h2>
+[code language="cpp"]
+private:
+    glm::vec3 m_pos, m_lookAt, m_up;
+    float m_pan_vel = .1f;
+    float m_dolly_vel = 3.f;
+    float m_orbit_vel = 4.f;
+
+    glm::mat4x4 m_projection;
+    mutable glm::mat4x4 m_vp;
+    mutable bool m_dirty = true;
+[/code]
+Los primeros 3 miembros se usan para saber dónde está la cámara, hacia dónde mira (el punto en el espacio, el pivote para orbitar, no solo la dirección) y hacia dónde es "arriba".
+
+Luego están los 3 modificadores de velocidad que ajusté para las partículas. Se podrían exponer y modificar, pero no lo encontré necesario para la demo. Afectan qué tan rápido (o lento) se mueve la cámara en cada operación.
+
+Al final tenemos la matriz de proyección (que solo cambia al cambiar la pantalla) y dos miembros <i>mutable</i>. Son así porque se usan dentro de un método <i>const</i> pero se interpretan como el caché de una optimización, los miembros importantes son los que se usan para la posición, <i>lookAt</i> y <i>up</i>.
+
+Hice esto así porque en cada operación es más fácil modificar estos 3 miembros, pero calcular la matrix view-projection en cada frame, aún si la cámara no se movió parecía un desperdicio. Como cualquier cache, la variable dirty se usa para actualizarlo.
+<h2>Implementación</h2>
+[code language="cpp"]
+camera::camera(const glm::vec2& screen) {
+    screen_change(screen);
+    home();
+}
+
+void camera::screen_change(const glm::vec2& screen) {
+    m_projection = glm::perspective(glm::radians(45.f), screen.x / screen.y, .5f, 100.f);
+
+    m_dirty = true;
+}
+
+void camera::home() {
+    m_pos = glm::vec3{ 0.f, 0.f, 2.7f };
+    m_lookAt = glm::vec3{ 0.f, 0.f, 0.f };
+    m_up = glm::vec3{ 0.f, 1.f, 0.f };
+    m_dirty = true;
+}
+[/code]
+Los 3 primeros métodos, nada muy importante. El constructor delega el trabajo en los otros 2.  <code>screen_change</code> recalcula la matriz proyección como una matriz perspectiva de Pi/4 radianes de FOV vertical y .5 y 100 como los planos <i>near</i> y </far> (dando mucho espacio para dolly en la demo que está alrededor de (0, 0, 0)). Para est uso la implementación del constructor de la matriz perspectiva de GLM. :)
+
+Nota: Uso <code>glm::radians</code> porque fuerzo a GLM a trabajar en radianes. Y trabajo en radianes porque... no sé, me acostumbre a trabajar con ellos.
+
+Como ven, hay muchos parámetros más que se pueden exponer :)
+<h3>Dolly</h3>
+[code language="cpp"]
+void camera::dolly(const float dz) {
+    // TODO: Dolly based on hit point (not center, using mouse screenpos)
+    const auto move = m_pos - m_lookAt;
+    const auto curr_dist = glm::length(move);
+    const auto new_dist = glm::clamp(dz * m_dolly_vel + curr_dist, 1.f, 50.f);
+
+    m_pos = m_lookAt + (glm::normalize(move) * new_dist);
+    m_dirty = true;
+}
+[/code]
+La operación de dolly primero calcula el actual vector <i>forward</i> inverso y el largo del mismo.
+
+Luego calcula la nueva distancia agregando el desplazamiento escalado por el parámetro de velocidad (la operación de clamp asegura por lo menos 1 unidad y no más de 50).
+
+Finalmente obtiene la nueva posición de la cámara con el vector <i>forward</i> inverso y la nueva distancia. Como dije, dado que la operación cambia propiedades de la cámara, la bandera dirty es activada.
+<h3>Pan</h3>
+[code language="cpp"]
+void camera::pan(const glm::vec2& dd) {
+    // TODO: Pan with hit point always below mouse (using mouse screenpos)
+    auto adjusted_dd = dd * m_pan_vel;
+
+    auto rev_foward = glm::normalize(m_pos - m_lookAt);
+    auto right_move = glm::normalize(glm::cross(m_up, rev_foward)) * -adjusted_dd.x;
+    auto up_move = m_up * adjusted_dd.y;
+    auto move = up_move + right_move;
+    m_pos += move;
+    m_lookAt += move;
+    m_dirty = true;
+}
+[/code]
+Pan modifica ambos el pivote y la posición de la cámara. Haciendo una operación similar a dolly, calcula la nueva posición moviendo la cámara de izquierda a derecha y de arriba hacia abajo dependiendo de los desplazamientos en x e y respectivamente.
+
+Luego aplica el mismo desplazamiento al punto lookAt (pivote) para mantener el mismo vector <i>forward</i> y su largo.
+<h3>Orbit</h3>
+[code language="cpp"]
+void camera::orbit(const glm::vec2& dd) {
+    // TODO: Orbit with hit point always below mouse (using mouse screenpos)
+    auto adjusted_dd = dd * m_orbit_vel;
+    auto rev_foward = m_pos - m_lookAt;
+    const auto len_rf = glm::length(rev_foward);
+    rev_foward = glm::normalize(rev_foward);
+
+    const auto h_rot = glm::rotate(glm::radians(-adjusted_dd.x), m_up);
+    const auto v_rot = glm::rotate(glm::radians(-adjusted_dd.y), glm::normalize(glm::cross(m_up, rev_foward)));
+    m_pos = m_lookAt + glm::vec3{ h_rot * v_rot * glm::vec4{ rev_foward, 0.f } } * len_rf;
+    m_up = glm::vec3{ v_rot * glm::vec4{ m_up, 0.f } };
+    m_dirty = true;
+}
+[/code]
+Orbit es un poco más complejo, pero no tanto. Piensen en 2 aros alrededor del punto de pivote, uno horizontal y uno vertical, lo que hace es calcular 2 matrices de rotación sobre estos 2 aros usando el parámetro de desplazamiento y el factor de velocidad.
+
+Luego rota el vector <i>forward</i> inverso y calcula la nueva posición agregándolselo al punto de pivote. El vector <i>up</i> solo es afectado por la rotación vertical.
+<h3>Obteniendo la matriz vp</h3>
+[code language="cpp"]
+const glm::mat4x4& camera::get_vp() const {
+    if (m_dirty) {
+        m_vp = m_projection * glm::lookAt(m_pos, m_lookAt, m_up);
+        m_dirty = false;
+    }
+    return m_vp;
+}
+[/code]
+Como ven la matriz view-projection es calculada solo si la bandera de dirty está setada, si no es así simplemente se retorna. Nuevamente me ahorro trabajo al usar la función <code>glm::lookAt</code> que genera la matriz de vista usando los vectores de posición, <i>lookAt</i> y <i>up</i>.
+<h3>TODO, posición en la pantalla</h3>
+Si lo notaron, todos los métodos arrancan con un <i>TODO</i> ("to do", "a realizar"). La cosa es que todos trabajan en una forma muy simple que era suficientemente buena para mi, y en alcunos casos es la correcta y más fácil. Pero, es posible una modificación a cada uno que implica mantener alguna restricción relacionada a la posición en pantalla en la cual el movimiento arrancó.
+
+En el caso de dolly, esta implementación mantiene el pixel que está debajo del centro de la pantalla, siempre debajo del centro de la pantalla pero, si pensamos en el punto de la pantalla donde se activo el movimiento como el origen de un rayo que va a intersectar con algo en el mundo 3D (<i>ray picking</i>), la alternativa sería darle relevancia a esta posición rotando el desplazamiento de la camara hacia este punto de intersección.
+
+Esto no cambiaría el vector <i>forward</i>, pero el vector de desplazamiento sería calculado con el punto de intersección y la posición de la cámara, en lugar del punto de pivote.
+
+Para pan y orbit, nuestra restricción podría ser que el punto de intersección en 3D de la posición en 2D sobre la pantalla fuese siempre el mismo durante toda la operación (lo que sea que hay debajo del mouse o dedo siempre quedaría debajo del mouse o dedo).
+
+Estas 3 cosas son un poco más complejas de realizar y no me parecieron suficientemente importantes para hacer una demo de una partículas flotando sin ninguna otra referencia, así que queda como "ejercicio para el lector".
+
+Este artículo es parte de la serie <i>Particles!</i>, pueden ver entradas anteriores <a href="https://marianogonzalezn.wordpress.com/2016/04/26/particles-1/">acá</a>, <a href="https://marianogonzalezn.wordpress.com/2016/05/09/particles-2/">acá</a> and <a href="https://marianogonzalezn.wordpress.com/2016/05/16/particles-3-multithreading/">acá</a>. <a href="https://github.com/mariano-gn/randpart">Acá</a> está el repositorio de la demo. ¡Espero les guste!
+<a href="#es">Inicio</a>

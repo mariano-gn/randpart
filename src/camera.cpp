@@ -21,7 +21,6 @@ SOFTWARE.
 */
 
 #include "camera.h"
-#include <logger.h>
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/norm.hpp>
@@ -35,7 +34,7 @@ camera::camera(const glm::vec2& screen) {
 
 void camera::screen_change(const glm::vec2& screen) {
     m_projection = glm::perspective(glm::radians(45.f), screen.x / screen.y, .5f, 100.f);
-    
+
     m_dirty = true;
 }
 
